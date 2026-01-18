@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import type { Manhwa, Chapter } from "@/lib/types"
 
 const MAX_PAGES_PER_CHAPTER = 20
 
-export default function UploadPagesPage() {
+function UploadPagesContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, isLoading, logout, isAuthenticated } = useAuth()
@@ -393,5 +393,17 @@ export default function UploadPagesPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function UploadPagesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-background to-card/20 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-fuchsia-500" />
+      </div>
+    }>
+      <UploadPagesContent />
+    </Suspense>
   )
 }

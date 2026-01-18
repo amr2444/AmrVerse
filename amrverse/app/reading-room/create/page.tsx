@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation"
-import { useState } from "react"
+import { useState, Suspense } from "react"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +11,7 @@ import type { ReadingRoom } from "@/lib/types"
 
 type TabType = "join" | "create"
 
-export default function CreateRoomPage() {
+function CreateRoomContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, token } = useAuth()
@@ -341,5 +341,17 @@ export default function CreateRoomPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function CreateRoomPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    }>
+      <CreateRoomContent />
+    </Suspense>
   )
 }
