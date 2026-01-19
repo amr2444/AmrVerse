@@ -65,12 +65,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     // Hash password with secure PBKDF2 (100,000 iterations)
     const passwordHash = hashPassword(payload.password)
 
+    // Check if this email should be admin/creator
+    const adminEmails = process.env.ADMIN_EMAIL?.split(",").map(e => e.trim().toLowerCase()) || []
+    const isCreator = adminEmails.includes(payload.email.toLowerCase())
+
     // Create user
     const result = await sql(
-      `INSERT INTO users (email, username, password_hash, display_name) 
-       VALUES ($1, $2, $3, $4) 
+      `INSERT INTO users (email, username, password_hash, display_name, is_creator) 
+       VALUES ($1, $2, $3, $4, $5) 
        RETURNING id, email, username, display_name, avatar_url, bio, is_creator, created_at, updated_at`,
-      [payload.email.toLowerCase(), payload.username, passwordHash, payload.displayName || payload.username],
+      [payload.email.toLowerCase(), payload.username, passwordHash, payload.displayName || payload.username, isCreator],
     )
 
     if (!result || result.length === 0) {

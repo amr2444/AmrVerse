@@ -31,6 +31,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
+    // Check if this email should be admin/creator
+    const adminEmails = process.env.ADMIN_EMAIL?.split(",").map(e => e.trim().toLowerCase()) || []
+    const shouldBeCreator = adminEmails.includes(payload.email.toLowerCase())
+
+    // If user is in ADMIN_EMAIL list but not yet creator, update them
+    if (shouldBeCreator) {
+      await sql(
+        `UPDATE users SET is_creator = true WHERE email = $1 AND is_creator = false`,
+        [payload.email.toLowerCase()]
+      )
+    }
+
     // Find user by email
     const [user] = await sql(
       `SELECT id, email, username, password_hash, display_name, avatar_url, bio, is_creator, created_at, updated_at 
