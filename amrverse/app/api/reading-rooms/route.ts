@@ -1,7 +1,7 @@
-// Create and list reading rooms
+// Create and list reading rooms - SECURED: userId extracted from JWT token
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { generateRoomCode } from "@/lib/auth"
+import { generateRoomCode, getUserIdFromToken } from "@/lib/auth"
 import type { ApiResponse, ReadingRoom } from "@/lib/types"
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<ReadingRoom>>> {
@@ -17,6 +17,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
+    // SECURITY FIX: Extract hostId from JWT token instead of request body
+    const hostId = getUserIdFromToken(token)
+    if (!hostId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid or expired token",
+        },
+        { status: 401 },
+      )
+    }
+
     const payload = await request.json()
     const code = generateRoomCode()
 
@@ -24,7 +36,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       `INSERT INTO reading_rooms (code, manhwa_id, chapter_id, host_id, room_name, max_participants)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, code, manhwa_id, chapter_id, host_id, room_name, current_scroll_position, is_active, max_participants, created_at, expires_at`,
-      [code, payload.manhwaId, payload.chapterId, payload.hostId, payload.roomName, payload.maxParticipants || 10],
+      [code, payload.manhwaId, payload.chapterId, hostId, payload.roomName, payload.maxParticipants || 10],
     )
 
     return NextResponse.json(
@@ -71,8 +83,17 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<ApiRespo
       )
     }
 
+    // SECURITY FIX: Extract userId from JWT token instead of request body
+    const userId = getUserIdFromToken(token)
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Invalid or expired token" },
+        { status: 401 },
+      )
+    }
+
     const payload = await request.json()
-    const { roomId, scrollPosition, currentPageIndex, hostId } = payload
+    const { roomId, scrollPosition, currentPageIndex } = payload
 
     if (!roomId) {
       return NextResponse.json(
@@ -94,7 +115,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<ApiRespo
       )
     }
 
-    if (room.host_id !== hostId) {
+    // SECURITY FIX: Compare against token userId, not payload hostId
+    if (room.host_id !== userId) {
       return NextResponse.json(
         { success: false, error: "Only the host can update scroll position" },
         { status: 403 },
@@ -148,20 +170,21 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
       )
     }
 
+    // SECURITY FIX: Extract userId from JWT token instead of query params
+    const userId = getUserIdFromToken(token)
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Invalid or expired token" },
+        { status: 401 },
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const roomId = searchParams.get("roomId")
-    const hostId = searchParams.get("hostId")
 
     if (!roomId) {
       return NextResponse.json(
         { success: false, error: "roomId is required" },
-        { status: 400 },
-      )
-    }
-
-    if (!hostId) {
-      return NextResponse.json(
-        { success: false, error: "hostId is required" },
         { status: 400 },
       )
     }
@@ -179,7 +202,8 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
       )
     }
 
-    if (room.host_id !== hostId) {
+    // SECURITY FIX: Compare against token userId, not query param hostId
+    if (room.host_id !== userId) {
       return NextResponse.json(
         { success: false, error: "Only the host can delete this room" },
         { status: 403 },

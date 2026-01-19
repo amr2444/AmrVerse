@@ -1,6 +1,8 @@
-// Save and retrieve panel comments (comments on specific manga panels)
+// Save and retrieve panel comments (comments on specific manga panels) - SECURED
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
+import { getUserIdFromToken } from "@/lib/auth"
+import { sanitizeInput } from "@/lib/validations"
 import type { ApiResponse, PanelComment } from "@/lib/types"
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<PanelComment>>> {
@@ -16,13 +18,40 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
+    // SECURITY FIX: Extract userId from JWT token instead of request body
+    const userId = getUserIdFromToken(token)
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Invalid or expired token" },
+        { status: 401 },
+      )
+    }
+
     const payload = await request.json()
+
+    if (!payload.chapterPageId || !payload.roomId || !payload.comment) {
+      return NextResponse.json(
+        { success: false, error: "chapterPageId, roomId, and comment are required" },
+        { status: 400 },
+      )
+    }
+
+    // Validate comment length
+    if (payload.comment.length > 1000) {
+      return NextResponse.json(
+        { success: false, error: "Comment too long (max 1000 characters)" },
+        { status: 400 },
+      )
+    }
+
+    // Sanitize comment content to prevent XSS
+    const sanitizedComment = sanitizeInput(payload.comment)
 
     const [comment] = await sql(
       `INSERT INTO panel_comments (chapter_page_id, room_id, user_id, comment, x_position, y_position)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, chapter_page_id, room_id, user_id, comment, x_position, y_position, created_at, updated_at`,
-      [payload.chapterPageId, payload.roomId, payload.userId, payload.comment, payload.xPosition, payload.yPosition],
+      [payload.chapterPageId, payload.roomId, userId, sanitizedComment, payload.xPosition, payload.yPosition],
     )
 
     return NextResponse.json(

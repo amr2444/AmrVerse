@@ -1,6 +1,7 @@
-// Add/Remove favorites
+// Add/Remove favorites - SECURED: userId extracted from JWT token
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
+import { getUserIdFromToken } from "@/lib/auth"
 import type { ApiResponse } from "@/lib/types"
 
 interface FavoriteResponse {
@@ -20,11 +21,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
-    const { userId, manhwaId } = await request.json()
-
-    if (!userId || !manhwaId) {
+    // SECURITY FIX: Extract userId from JWT token instead of request body
+    const userId = getUserIdFromToken(token)
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: "Missing userId or manhwaId" },
+        { success: false, error: "Invalid or expired token" },
+        { status: 401 }
+      )
+    }
+
+    const { manhwaId } = await request.json()
+
+    if (!manhwaId) {
+      return NextResponse.json(
+        { success: false, error: "Missing manhwaId" },
         { status: 400 }
       )
     }
@@ -60,13 +70,21 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
       )
     }
 
+    // SECURITY FIX: Extract userId from JWT token instead of query params
+    const userId = getUserIdFromToken(token)
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Invalid or expired token" },
+        { status: 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
     const manhwaId = searchParams.get("manhwaId")
 
-    if (!userId || !manhwaId) {
+    if (!manhwaId) {
       return NextResponse.json(
-        { success: false, error: "Missing userId or manhwaId" },
+        { success: false, error: "Missing manhwaId" },
         { status: 400 }
       )
     }
@@ -89,7 +107,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
   }
 }
 
-// Check if manhwa is favorited
+// Get user's favorites
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<{ favorites: string[] }>>> {
   try {
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -100,13 +118,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       )
     }
 
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
-
+    // SECURITY FIX: Extract userId from JWT token instead of query params
+    const userId = getUserIdFromToken(token)
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "Missing userId" },
-        { status: 400 }
+        { success: false, error: "Invalid or expired token" },
+        { status: 401 }
       )
     }
 

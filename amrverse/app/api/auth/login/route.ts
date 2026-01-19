@@ -1,15 +1,24 @@
 // Authentication login endpoint
-// Handles user authentication and session creation
+// Handles user authentication and JWT token generation
 export const runtime = "nodejs"
 
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { verifyPassword, generateToken } from "@/lib/auth"
+import { verifyPassword, generateTokenPair } from "@/lib/auth"
+import { applyRateLimit, getClientIP, createRateLimitHeaders, resetRateLimit } from "@/lib/rate-limiter"
 import type { LoginPayload } from "@/lib/validations"
 import type { ApiResponse, User } from "@/lib/types"
 
-export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ user: User; token: string }>>> {
+export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ user: User; accessToken: string; refreshToken: string }>>> {
   try {
+    // Apply rate limiting for auth endpoints (strict: 5 attempts per 15 min)
+    const clientIP = getClientIP(request)
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(request, "auth")
+    
+    if (rateLimitResponse) {
+      return rateLimitResponse as NextResponse<ApiResponse<{ user: User; accessToken: string; refreshToken: string }>>
+    }
+
     const payload: LoginPayload = await request.json()
 
     if (!payload.email || !payload.password) {
@@ -50,9 +59,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
-    // Generate session token with userId encoded
-    const randomToken = generateToken()
-    const sessionToken = Buffer.from(`${user.id}:${randomToken}`).toString("base64")
+    // Generate JWT token pair (access + refresh)
+    const { accessToken, refreshToken } = generateTokenPair({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      isCreator: user.is_creator,
+    })
+
+    // Reset rate limit on successful login
+    resetRateLimit(clientIP, "auth")
 
     return NextResponse.json(
       {
@@ -69,7 +85,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
             createdAt: user.created_at,
             updatedAt: user.updated_at,
           },
-          token: sessionToken,
+          accessToken,
+          refreshToken,
         },
         message: "Login successful",
       },

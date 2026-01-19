@@ -1,6 +1,8 @@
-// WebSocket event handlers for reading rooms
+// WebSocket event handlers for reading rooms - SECURED with JWT authentication
 import type { Server, Socket } from "socket.io"
 import type { ScrollEvent } from "@/lib/types"
+import { verifyAccessToken, type JWTPayload } from "@/lib/auth"
+import { sanitizeInput } from "@/lib/validations"
 
 interface RoomState {
   roomId: string
@@ -19,15 +21,98 @@ interface RoomState {
   isActive: boolean
 }
 
+// Extended socket with authenticated user data
+interface AuthenticatedSocket extends Socket {
+  user?: JWTPayload
+}
+
+// Rate limiting for socket events (per socket)
+interface SocketRateLimit {
+  messageCount: number
+  lastReset: number
+}
+
 const roomStates = new Map<string, RoomState>()
+const socketRateLimits = new Map<string, SocketRateLimit>()
+
+// Socket rate limit config: 30 messages per minute
+const SOCKET_RATE_LIMIT = 30
+const SOCKET_RATE_WINDOW = 60 * 1000
+
+/**
+ * Check if socket has exceeded rate limit
+ */
+function checkSocketRateLimit(socketId: string): boolean {
+  const now = Date.now()
+  let rateLimit = socketRateLimits.get(socketId)
+
+  if (!rateLimit || now - rateLimit.lastReset > SOCKET_RATE_WINDOW) {
+    rateLimit = { messageCount: 1, lastReset: now }
+    socketRateLimits.set(socketId, rateLimit)
+    return true
+  }
+
+  rateLimit.messageCount++
+  if (rateLimit.messageCount > SOCKET_RATE_LIMIT) {
+    return false
+  }
+
+  return true
+}
 
 export function initializeSocketHandlers(io: Server) {
-  io.on("connection", (socket: Socket) => {
-    console.log("[v0] User connected:", socket.id)
+  // SECURITY FIX: Add authentication middleware
+  io.use((socket: AuthenticatedSocket, next) => {
+    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "")
 
-    // Join a reading room
-    socket.on("join-room", (data: { roomCode: string; userId: string; username: string }) => {
-      const { roomCode, userId, username } = data
+    if (!token) {
+      console.log("[Socket] Connection rejected: No token provided")
+      return next(new Error("Authentication required"))
+    }
+
+    const payload = verifyAccessToken(token)
+    if (!payload) {
+      console.log("[Socket] Connection rejected: Invalid token")
+      return next(new Error("Invalid or expired token"))
+    }
+
+    // Attach user info to socket
+    socket.user = payload
+    next()
+  })
+
+  io.on("connection", (socket: AuthenticatedSocket) => {
+    console.log("[v0] Authenticated user connected:", socket.user?.username, socket.id)
+
+    // Clean up rate limit on disconnect
+    socket.on("disconnect", () => {
+      socketRateLimits.delete(socket.id)
+    })
+
+    // Join a reading room - SECURED: use authenticated user data
+    socket.on("join-room", (data: { roomCode: string }) => {
+      if (!socket.user) {
+        socket.emit("error", { message: "Not authenticated" })
+        return
+      }
+
+      // Rate limit check
+      if (!checkSocketRateLimit(socket.id)) {
+        socket.emit("error", { message: "Rate limit exceeded" })
+        return
+      }
+
+      const { roomCode } = data
+      // SECURITY FIX: Use authenticated user data instead of client-provided data
+      const userId = socket.user.userId
+      const username = socket.user.username
+
+      // Validate room code format
+      if (!roomCode || typeof roomCode !== "string" || roomCode.length > 20) {
+        socket.emit("error", { message: "Invalid room code" })
+        return
+      }
+
       socket.join(roomCode)
 
       let roomState = roomStates.get(roomCode)
@@ -62,20 +147,29 @@ export function initializeSocketHandlers(io: Server) {
       console.log(`[v0] ${username} joined room ${roomCode}`)
     })
 
-    // Handle scroll synchronization
+    // Handle scroll synchronization - SECURED
     socket.on("scroll-sync", (data: ScrollEvent) => {
+      if (!socket.user) return
+
+      // Rate limit check
+      if (!checkSocketRateLimit(socket.id)) {
+        socket.emit("error", { message: "Rate limit exceeded" })
+        return
+      }
+
       const rooms = Array.from(socket.rooms)
       const roomCode = rooms.find((r) => r !== socket.id)
 
       if (roomCode) {
         const roomState = roomStates.get(roomCode)
-        if (roomState && roomState.hostId === data.userId) {
+        // SECURITY FIX: Use authenticated userId, not client-provided
+        if (roomState && roomState.hostId === socket.user.userId) {
           roomState.currentScrollPosition = data.position
           roomState.currentPageNumber = data.pageNumber
 
           // Broadcast scroll position to all users except sender
           socket.to(roomCode).emit("scroll-update", {
-            userId: data.userId,
+            userId: socket.user.userId,
             position: data.position,
             pageNumber: data.pageNumber,
             timestamp: new Date(),
@@ -84,17 +178,41 @@ export function initializeSocketHandlers(io: Server) {
       }
     })
 
-    // Handle chat messages (handled separately in chat handler)
-    socket.on("send-message", (data: { roomCode: string; message: string; userId: string; username: string }) => {
-      const { roomCode } = data
+    // Handle chat messages - SECURED with sanitization
+    socket.on("send-message", (data: { roomCode: string; message: string }) => {
+      if (!socket.user) return
+
+      // Rate limit check
+      if (!checkSocketRateLimit(socket.id)) {
+        socket.emit("error", { message: "Rate limit exceeded" })
+        return
+      }
+
+      const { roomCode, message } = data
+
+      // Validate and sanitize message
+      if (!message || typeof message !== "string" || message.length > 2000) {
+        socket.emit("error", { message: "Invalid message" })
+        return
+      }
+
+      const sanitizedMessage = sanitizeInput(message)
+
+      // SECURITY FIX: Use authenticated user data
       io.to(roomCode).emit("message-received", {
-        ...data,
+        roomCode,
+        message: sanitizedMessage,
+        userId: socket.user.userId,
+        username: socket.user.username,
         timestamp: new Date(),
       })
     })
 
-    socket.on("typing-start", (data: { roomCode: string; username: string }) => {
-      const { roomCode, username } = data
+    socket.on("typing-start", (data: { roomCode: string }) => {
+      if (!socket.user) return
+
+      const { roomCode } = data
+      const username = socket.user.username
       const roomState = roomStates.get(roomCode)
 
       if (roomState) {
@@ -110,8 +228,11 @@ export function initializeSocketHandlers(io: Server) {
       }
     })
 
-    socket.on("typing-stop", (data: { roomCode: string; username: string }) => {
-      const { roomCode, username } = data
+    socket.on("typing-stop", (data: { roomCode: string }) => {
+      if (!socket.user) return
+
+      const { roomCode } = data
+      const username = socket.user.username
       const roomState = roomStates.get(roomCode)
 
       if (roomState) {
@@ -128,20 +249,47 @@ export function initializeSocketHandlers(io: Server) {
     })
 
     socket.on("react-message", (data: { roomCode: string; messageId: string; emoji: string }) => {
-      const { roomCode } = data
+      if (!socket.user) return
+
+      // Rate limit check
+      if (!checkSocketRateLimit(socket.id)) {
+        socket.emit("error", { message: "Rate limit exceeded" })
+        return
+      }
+
+      const { roomCode, messageId, emoji } = data
+
+      // Validate emoji (only allow common emojis)
+      const validEmojis = ["👍", "❤️", "😂", "😮", "😢", "😡", "🔥", "👏", "🎉", "💯"]
+      if (!validEmojis.includes(emoji)) {
+        socket.emit("error", { message: "Invalid emoji" })
+        return
+      }
+
       io.to(roomCode).emit("message-reaction", {
-        ...data,
+        messageId,
+        emoji,
+        userId: socket.user.userId,
+        username: socket.user.username,
         timestamp: new Date(),
       })
     })
 
     socket.on("sync-scroll", (data: ScrollEvent) => {
+      if (!socket.user) return
+
+      // Rate limit check (allow more frequent scroll updates)
+      if (!checkSocketRateLimit(socket.id)) {
+        return // Silently ignore, don't spam error messages for scroll
+      }
+
       const rooms = Array.from(socket.rooms)
       const roomCode = rooms.find((r) => r !== socket.id)
 
       if (roomCode) {
         const roomState = roomStates.get(roomCode)
-        if (roomState && roomState.hostId === data.userId) {
+        // SECURITY FIX: Use authenticated userId
+        if (roomState && roomState.hostId === socket.user.userId) {
           roomState.currentScrollPosition = data.position
           roomState.currentPageNumber = data.pageNumber
 

@@ -85,6 +85,31 @@ export async function PATCH(
       )
     }
 
+    // SECURITY FIX: Import and verify token, then check if user owns this profile
+    const { getUserIdFromToken } = await import("@/lib/auth")
+    const tokenUserId = getUserIdFromToken(token)
+    
+    if (!tokenUserId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid or expired token",
+        },
+        { status: 401 },
+      )
+    }
+
+    // SECURITY FIX: Ensure user can only update their own profile
+    if (tokenUserId !== id) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "You can only update your own profile",
+        },
+        { status: 403 },
+      )
+    }
+
     const payload = await request.json()
 
     const [updatedUser] = await sql(
@@ -97,6 +122,16 @@ export async function PATCH(
        RETURNING id, email, username, display_name, avatar_url, bio, is_creator, created_at, updated_at`,
       [payload.displayName, payload.avatarUrl, payload.bio, id],
     )
+
+    if (!updatedUser) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "User not found",
+        },
+        { status: 404 },
+      )
+    }
 
     const [favoriteCount] = await sql("SELECT COUNT(*) as count FROM user_favorites WHERE user_id = $1", [id])
     const [progressCount] = await sql(

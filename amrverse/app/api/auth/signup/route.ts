@@ -4,12 +4,20 @@ export const runtime = "nodejs"
 
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { hashPassword, generateToken } from "@/lib/auth"
+import { hashPassword, generateTokenPair } from "@/lib/auth"
+import { applyRateLimit, getClientIP } from "@/lib/rate-limiter"
 import { validateSignup, type SignupPayload } from "@/lib/validations"
 import type { ApiResponse, User } from "@/lib/types"
 
-export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ user: User; token: string }>>> {
+export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ user: User; accessToken: string; refreshToken: string }>>> {
   try {
+    // Apply rate limiting for auth endpoints (strict: 5 attempts per 15 min)
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(request, "auth")
+    
+    if (rateLimitResponse) {
+      return rateLimitResponse as NextResponse<ApiResponse<{ user: User; accessToken: string; refreshToken: string }>>
+    }
+
     const payload: SignupPayload = await request.json()
 
     // Validate input
@@ -54,7 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
-    // Hash password
+    // Hash password with secure PBKDF2 (100,000 iterations)
     const passwordHash = hashPassword(payload.password)
 
     // Create user
@@ -71,9 +79,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
     const newUser = result[0]
 
-    // Generate session token with userId encoded
-    const randomToken = generateToken()
-    const sessionToken = Buffer.from(`${newUser.id}:${randomToken}`).toString("base64")
+    // Generate JWT token pair (access + refresh)
+    const { accessToken, refreshToken } = generateTokenPair({
+      id: newUser.id,
+      email: newUser.email,
+      username: newUser.username,
+      isCreator: newUser.is_creator,
+    })
 
     return NextResponse.json(
       {
@@ -90,7 +102,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
             createdAt: newUser.created_at,
             updatedAt: newUser.updated_at,
           },
-          token: sessionToken,
+          accessToken,
+          refreshToken,
         },
         message: "Account created successfully",
       },
