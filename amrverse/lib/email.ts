@@ -1,10 +1,25 @@
 // Email service using Resend
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const ADMIN_EMAIL = 'akef.minato@gmail.com';
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+
+// Lazy initialization to avoid build-time errors
+let resend: Resend | null = null;
+
+function getResendClient(): Resend {
+  if (!resend) {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.warn('[Email] RESEND_API_KEY not set. Using dummy client.');
+      // Use dummy key to prevent build errors
+      resend = new Resend('re_dummy_key_for_build');
+    } else {
+      resend = new Resend(apiKey);
+    }
+  }
+  return resend;
+}
 
 interface CreatorRequestNotification {
   userName: string;
@@ -30,7 +45,14 @@ interface CreatorRejectionNotification {
 
 export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification) {
   try {
-    const { data: emailData, error } = await resend.emails.send({
+    // Skip if no API key configured
+    if (!process.env.RESEND_API_KEY) {
+      console.log('[Email] Skipping email (no API key configured)');
+      return { success: true };
+    }
+
+    const client = getResendClient();
+    const { data: emailData, error } = await client.emails.send({
       from: FROM_EMAIL,
       to: ADMIN_EMAIL,
       subject: `🎨 Nouvelle demande créateur - ${data.userName}`,
@@ -120,7 +142,14 @@ export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification
 
 export async function sendCreatorApprovalEmail(data: CreatorApprovalNotification) {
   try {
-    const { data: emailData, error } = await resend.emails.send({
+    // Skip if no API key configured
+    if (!process.env.RESEND_API_KEY) {
+      console.log('[Email] Skipping approval email (no API key configured)');
+      return { success: true };
+    }
+
+    const client = getResendClient();
+    const { data: emailData, error } = await client.emails.send({
       from: FROM_EMAIL,
       to: data.userEmail,
       subject: '🎉 Félicitations ! Votre demande créateur a été approuvée',
@@ -207,7 +236,14 @@ export async function sendCreatorApprovalEmail(data: CreatorApprovalNotification
 
 export async function sendCreatorRejectionEmail(data: CreatorRejectionNotification) {
   try {
-    const { data: emailData, error } = await resend.emails.send({
+    // Skip if no API key configured
+    if (!process.env.RESEND_API_KEY) {
+      console.log('[Email] Skipping rejection email (no API key configured)');
+      return { success: true };
+    }
+
+    const client = getResendClient();
+    const { data: emailData, error } = await client.emails.send({
       from: FROM_EMAIL,
       to: data.userEmail,
       subject: 'Mise à jour de votre demande créateur AmrVerse',
