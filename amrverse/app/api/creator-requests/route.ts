@@ -80,6 +80,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<CreatorRequest>>> {
   try {
     const token = request.headers.get("authorization")?.split(" ")[1]
+    console.log('[CreatorRequest POST] Token received:', token ? 'YES' : 'NO')
+    
     if (!token) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -88,9 +90,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     const userId = getUserIdFromToken(token)
+    console.log('[CreatorRequest POST] UserId extracted:', userId)
+    
     if (!userId) {
+      console.error('[CreatorRequest POST] Invalid or expired token')
       return NextResponse.json(
-        { success: false, error: "Invalid token" },
+        { success: false, error: "Invalid or expired token. Please log out and log in again." },
         { status: 401 },
       )
     }
