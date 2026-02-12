@@ -39,7 +39,7 @@ export default function BecomeCreatorPage() {
   // Vérifier si l'utilisateur a déjà une demande
   useEffect(() => {
     if (!user || !token) {
-      router.push("/auth")
+      router.push("/auth?redirect=/become-creator")
       return
     }
 
@@ -98,7 +98,7 @@ export default function BecomeCreatorPage() {
     // Ouvrir le dialog seulement si l'utilisateur est connecté
     if (!user) {
       console.log('[BecomeCreator] No user, redirecting to auth')
-      router.push("/auth")
+      router.push("/auth?redirect=/become-creator")
       return
     }
     

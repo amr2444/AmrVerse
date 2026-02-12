@@ -12,9 +12,12 @@ export default function AuthPage() {
   const { isAuthenticated, isLoading } = useAuth()
   const [isSignup, setIsSignup] = useState(false)
 
+  // Récupérer l'URL de redirection depuis les query params
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      router.push("/dashboard")
+      const params = new URLSearchParams(window.location.search)
+      const redirectTo = params.get('redirect') || '/dashboard'
+      router.push(redirectTo)
     }
   }, [isAuthenticated, isLoading, router])
 
@@ -34,7 +37,9 @@ export default function AuthPage() {
   }
 
   const handleSuccess = () => {
-    router.push("/dashboard")
+    const params = new URLSearchParams(window.location.search)
+    const redirectTo = params.get('redirect') || '/dashboard'
+    router.push(redirectTo)
   }
 
   return (
