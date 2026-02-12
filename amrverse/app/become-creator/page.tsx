@@ -147,7 +147,7 @@ export default function BecomeCreatorPage() {
         body: JSON.stringify({
           fullName: formData.fullName || user?.username || "Utilisateur",
           email: formData.email || user?.email,
-          presentation: `Utilisateur ${user?.username} souhaite devenir créateur sur AmrVerse.`,
+          presentation: formData.presentation,
           motivation: formData.motivation,
           portfolioUrl: formData.portfolioUrl || null,
         }),
