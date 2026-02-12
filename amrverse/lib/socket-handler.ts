@@ -339,7 +339,13 @@ export function initializeSocketHandlers(io: Server) {
         }
       }
 
-      socket.leaveAll()
+      // Leave all rooms manually
+      const userRooms = Array.from(socket.rooms)
+      userRooms.forEach(room => {
+        if (room !== socket.id) {
+          socket.leave(room)
+        }
+      })
     })
 
     socket.on("disconnect", () => {

@@ -71,7 +71,7 @@ export async function DELETE(
       )
     }
 
-    if (!user.is_creator) {
+    if (!user.isCreator) {
       return NextResponse.json(
         { success: false, error: "Creator access required" },
         { status: 403 },
@@ -159,7 +159,7 @@ export async function PATCH(
       )
     }
 
-    if (!user.is_creator) {
+    if (!user.isCreator) {
       return NextResponse.json(
         { success: false, error: "Creator access required" },
         { status: 403 },

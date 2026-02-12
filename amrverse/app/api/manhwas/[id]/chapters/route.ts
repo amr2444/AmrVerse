@@ -76,7 +76,7 @@ export async function POST(
       )
     }
 
-    if (!user.is_creator) {
+    if (!user.isCreator) {
       return NextResponse.json(
         {
           success: false,

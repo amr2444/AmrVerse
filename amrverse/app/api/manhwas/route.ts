@@ -89,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
-    if (!user.is_creator) {
+    if (!user.isCreator) {
       return NextResponse.json(
         {
           success: false,

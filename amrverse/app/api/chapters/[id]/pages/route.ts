@@ -63,7 +63,7 @@ export async function POST(
     const { getUserFromToken } = await import("@/lib/auth")
     const user = await getUserFromToken(token, sql)
     
-    if (!user || !user.is_creator) {
+    if (!user || !user.isCreator) {
       return NextResponse.json(
         {
           success: false,

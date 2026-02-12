@@ -265,7 +265,7 @@ export async function getUserFromToken(
       `SELECT id, email, username, display_name, avatar_url, bio, is_creator 
        FROM users WHERE id = $1`,
       [payload.userId]
-    ) as AuthenticatedUser[]
+    ) as any[]
 
     if (!user) return null
 

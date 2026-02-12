@@ -89,8 +89,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
     const activeRooms = await sql(
       `SELECT DISTINCT
         rr.id, rr.code, rr.manhwa_id, rr.chapter_id, rr.host_id,
-        rr.room_name, rr.current_scroll_position, rr.is_active,
-        rr.max_participants, rr.created_at, rr.expires_at,
+        rr.room_name, rr.current_scroll_position, rr.current_page_index, 
+        rr.is_active, rr.max_participants, rr.sync_enabled,
+        rr.created_at, rr.expires_at,
         m.title as manhwa_title,
         m.cover_url as manhwa_cover_url,
         (SELECT COUNT(*) FROM room_participants WHERE room_id = rr.id) as participant_count
@@ -155,8 +156,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           hostId: r.host_id,
           roomName: r.room_name,
           currentScrollPosition: r.current_scroll_position,
+          currentPageIndex: r.current_page_index || 0,
           isActive: r.is_active,
           maxParticipants: r.max_participants,
+          syncEnabled: r.sync_enabled ?? true,
           createdAt: r.created_at,
           expiresAt: r.expires_at,
           manhwaTitle: r.manhwa_title,

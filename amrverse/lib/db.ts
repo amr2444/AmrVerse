@@ -28,18 +28,18 @@ function getPool() {
  *   import sql from "@/lib/db"
  *   const rows = await sql("SELECT ... WHERE id=$1", [id])
  */
-export default async function sql<T = any>(query: string, params: any[] = []) {
+export default async function sql<T extends Record<string, any> = any>(query: string, params: any[] = []): Promise<T[]> {
   const pool = getPool();
   const res = await pool.query<T>(query, params);
   return res.rows;
 }
 
 // Helpers (si ton code les utilise)
-export async function executeQuery<T>(query: string, params: unknown[] = []): Promise<T[]> {
+export async function executeQuery<T extends Record<string, any>>(query: string, params: unknown[] = []): Promise<T[]> {
   return (await sql<T>(query, params as any[])) as T[];
 }
 
-export async function executeQuerySingle<T>(query: string, params: unknown[] = []): Promise<T | null> {
+export async function executeQuerySingle<T extends Record<string, any>>(query: string, params: unknown[] = []): Promise<T | null> {
   const results = await executeQuery<T>(query, params);
   return results.length > 0 ? results[0] : null;
 }
