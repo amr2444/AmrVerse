@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, Poppins, Inter } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
+// import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { AuthProvider } from "@/lib/auth-context"
 
@@ -42,7 +42,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={`font-sans antialiased`} suppressHydrationWarning>
         <AuthProvider>{children}</AuthProvider>
-        <Analytics />
+        {/* <Analytics /> */}
       </body>
     </html>
   )
