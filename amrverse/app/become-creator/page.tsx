@@ -7,22 +7,23 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { AlertCircle, CheckCircle, Loader2, Sparkles, Clock, XCircle } from "lucide-react"
 import { Logo } from "@/components/logo"
 
 export default function BecomeCreatorPage() {
   const router = useRouter()
-  const { user, token } = useAuth()
+  const { user, token, refreshUser } = useAuth()
   const [loading, setLoading] = useState(false)
   const [checkingStatus, setCheckingStatus] = useState(true)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
   const [existingRequest, setExistingRequest] = useState<any>(null)
+  const [showDialog, setShowDialog] = useState(false)
 
   const [formData, setFormData] = useState({
     fullName: "",
     email: user?.email || "",
-    presentation: "",
     motivation: "",
     portfolioUrl: "",
   })
@@ -42,6 +43,25 @@ export default function BecomeCreatorPage() {
 
     checkExistingRequest()
   }, [user, token])
+
+  // Rafraîchir le profil utilisateur toutes les 10 secondes si la demande est en attente
+  useEffect(() => {
+    if (!existingRequest || existingRequest.status !== 'pending') return
+
+    const interval = setInterval(async () => {
+      await refreshUser()
+      // Après le refresh, vérifier si l'utilisateur est devenu créateur
+      const storedUser = localStorage.getItem("amrverse_user")
+      if (storedUser) {
+        const updatedUser = JSON.parse(storedUser)
+        if (updatedUser.isCreator) {
+          router.push("/admin/upload-content")
+        }
+      }
+    }, 10000) // 10 secondes
+
+    return () => clearInterval(interval)
+  }, [existingRequest, refreshUser, router])
 
   const checkExistingRequest = async () => {
     try {
@@ -64,18 +84,28 @@ export default function BecomeCreatorPage() {
     }
   }
 
+  const handleOpenDialog = () => {
+    // Ouvrir le dialog seulement si l'utilisateur est connecté
+    if (!user) {
+      router.push("/auth")
+      return
+    }
+    
+    // Si déjà créateur, rediriger
+    if (user.isCreator) {
+      router.push("/admin/upload-content")
+      return
+    }
+    
+    setShowDialog(true)
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
     setLoading(true)
 
     // Validation
-    if (formData.presentation.length < 50) {
-      setError("Votre présentation doit contenir au moins 50 caractères")
-      setLoading(false)
-      return
-    }
-
     if (formData.motivation.length < 50) {
       setError("Votre motivation doit contenir au moins 50 caractères")
       setLoading(false)
@@ -89,7 +119,13 @@ export default function BecomeCreatorPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          fullName: formData.fullName || user?.username || "Utilisateur",
+          email: formData.email || user?.email,
+          presentation: `Utilisateur ${user?.username} souhaite devenir créateur sur AmrVerse.`,
+          motivation: formData.motivation,
+          portfolioUrl: formData.portfolioUrl || null,
+        }),
       })
 
       const data = await res.json()
@@ -99,6 +135,7 @@ export default function BecomeCreatorPage() {
       }
 
       setSuccess(true)
+      setShowDialog(false)
       setTimeout(() => {
         router.push("/dashboard")
       }, 3000)
@@ -194,106 +231,104 @@ export default function BecomeCreatorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-purple-950/10 to-background py-12 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-8">
-          <Logo className="mx-auto mb-4" />
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
-            Devenir Créateur sur AmrVerse
-          </h1>
-          <p className="text-foreground/70 max-w-2xl mx-auto">
-            Partagez vos manhwas avec la communauté ! Remplissez ce formulaire pour soumettre 
-            votre candidature en tant que créateur.
-          </p>
+    <>
+      <div className="min-h-screen bg-gradient-to-b from-background via-purple-950/10 to-background py-12 px-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-8">
+            <Logo className="mx-auto mb-4" />
+            <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-purple-400 bg-clip-text text-transparent">
+              Devenir Créateur sur AmrVerse
+            </h1>
+            <p className="text-foreground/70 max-w-2xl mx-auto">
+              Partagez vos manhwas avec la communauté ! Cliquez sur le bouton ci-dessous pour soumettre 
+              votre candidature en tant que créateur.
+            </p>
+          </div>
+
+          <Card className="p-8 text-center">
+            <Sparkles className="w-16 h-16 text-primary mx-auto mb-6" />
+            <h2 className="text-2xl font-bold mb-4">Prêt à partager votre créativité ?</h2>
+            <p className="text-foreground/70 mb-6 max-w-xl mx-auto">
+              En tant que créateur, vous pourrez publier vos propres manhwas, gérer vos chapitres, 
+              et interagir avec une communauté passionnée de lecteurs.
+            </p>
+            
+            <div className="bg-muted/50 p-6 rounded-lg mb-6">
+              <h3 className="font-semibold mb-3">Avantages créateur :</h3>
+              <ul className="text-sm text-foreground/70 space-y-2 text-left max-w-md mx-auto">
+                <li>✅ Publier un nombre illimité de manhwas</li>
+                <li>✅ Gérer vos chapitres et pages facilement</li>
+                <li>✅ Suivre les statistiques de vos œuvres</li>
+                <li>✅ Construire votre communauté de fans</li>
+              </ul>
+            </div>
+
+            <Button
+              onClick={handleOpenDialog}
+              size="lg"
+              className="min-w-[200px]"
+            >
+              <Sparkles className="w-5 h-5 mr-2" />
+              Faire une demande
+            </Button>
+          </Card>
         </div>
+      </div>
 
-        <Card className="p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Nom complet */}
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Nom complet <span className="text-red-500">*</span>
-              </label>
-              <Input
-                type="text"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                placeholder="Votre nom et prénom"
-                required
-                disabled={loading}
-              />
-            </div>
+      {/* Dialog Popup */}
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Devenir Créateur</DialogTitle>
+            <DialogDescription>
+              Parlez-nous de votre projet et de ce que vous souhaitez apporter à la communauté AmrVerse.
+            </DialogDescription>
+          </DialogHeader>
 
-            {/* Email */}
+          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+            {/* Motivation - Zone de texte principale */}
             <div>
-              <label className="block text-sm font-medium mb-2">
-                Email <span className="text-red-500">*</span>
-              </label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="votre@email.com"
-                required
-                disabled={loading}
-              />
-              <p className="text-xs text-foreground/50 mt-1">
-                Vous recevrez la réponse à cette adresse
-              </p>
-            </div>
-
-            {/* Présentation */}
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Présentez-vous <span className="text-red-500">*</span>
-              </label>
-              <Textarea
-                value={formData.presentation}
-                onChange={(e) => setFormData({ ...formData, presentation: e.target.value })}
-                placeholder="Qui êtes-vous ? Quelle est votre expérience dans la création de manhwas ou de contenus similaires ?"
-                rows={6}
-                required
-                disabled={loading}
-                className="resize-none"
-              />
-              <p className="text-xs text-foreground/50 mt-1">
-                {formData.presentation.length}/50 caractères minimum
-              </p>
-            </div>
-
-            {/* Motivation */}
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Qu'est-ce que vous voulez créer ? <span className="text-red-500">*</span>
+              <label className="block text-sm font-semibold mb-2">
+                Pourquoi voulez-vous devenir créateur ? <span className="text-red-500">*</span>
               </label>
               <Textarea
                 value={formData.motivation}
                 onChange={(e) => setFormData({ ...formData, motivation: e.target.value })}
-                placeholder="Décrivez vos projets, vos idées, ce que vous souhaitez partager avec la communauté AmrVerse..."
-                rows={6}
+                placeholder="Parlez-nous de votre passion, vos projets de manhwa, et ce que vous voulez apporter à la communauté AmrVerse. Soyez authentique et détaillé !"
+                rows={8}
                 required
                 disabled={loading}
                 className="resize-none"
               />
-              <p className="text-xs text-foreground/50 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {formData.motivation.length}/50 caractères minimum
               </p>
             </div>
 
             {/* Portfolio (optionnel) */}
             <div>
-              <label className="block text-sm font-medium mb-2">
-                Portfolio ou lien vers vos travaux (optionnel)
+              <label className="block text-sm font-semibold mb-2">
+                Lien vers votre portfolio (optionnel)
               </label>
               <Input
                 type="url"
                 value={formData.portfolioUrl}
                 onChange={(e) => setFormData({ ...formData, portfolioUrl: e.target.value })}
-                placeholder="https://..."
+                placeholder="https://votre-portfolio.com"
                 disabled={loading}
               />
-              <p className="text-xs text-foreground/50 mt-1">
-                Site web, Instagram, Behance, etc.
+              <p className="text-xs text-muted-foreground mt-1">
+                Instagram, ArtStation, Behance, site personnel, etc.
+              </p>
+            </div>
+
+            {/* Info Box */}
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+              <p className="text-sm text-blue-400 font-medium mb-1">
+                📧 Notification par email
+              </p>
+              <p className="text-xs text-foreground/70">
+                Votre demande sera envoyée à l'administrateur. Vous recevrez une réponse par email à <strong>{user?.email}</strong> une fois votre candidature examinée.
               </p>
             </div>
 
@@ -305,32 +340,38 @@ export default function BecomeCreatorPage() {
               </div>
             )}
 
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              className="w-full"
-              size="lg"
-              disabled={loading || formData.presentation.length < 50 || formData.motivation.length < 50}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Envoi en cours...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5 mr-2" />
-                  Soumettre ma candidature
-                </>
-              )}
-            </Button>
-
-            <p className="text-xs text-center text-foreground/50">
-              En soumettant ce formulaire, vous acceptez que votre demande soit examinée par notre équipe.
-            </p>
+            {/* Buttons */}
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowDialog(false)}
+                disabled={loading}
+                className="flex-1"
+              >
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                disabled={loading || formData.motivation.length < 50}
+                className="flex-1"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Envoi...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Envoyer ma demande
+                  </>
+                )}
+              </Button>
+            </div>
           </form>
-        </Card>
-      </div>
-    </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

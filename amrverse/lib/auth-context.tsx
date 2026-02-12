@@ -15,6 +15,7 @@ interface AuthContextType {
   logout: () => void
   isAuthenticated: boolean
   refreshToken: () => Promise<boolean>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -169,6 +170,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("amrverse_user")
   }
 
+  // Refresh user profile from the server
+  const refreshUser = useCallback(async () => {
+    if (!user || !token) return
+
+    try {
+      const response = await fetch(`/api/users/${user.id}/profile`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) return
+
+      const data = await response.json()
+      if (data.success && data.data) {
+        setUser(data.data)
+        localStorage.setItem("amrverse_user", JSON.stringify(data.data))
+      }
+    } catch (error) {
+      console.error("Failed to refresh user:", error)
+    }
+  }, [user, token])
+
   return (
     <AuthContext.Provider
       value={{
@@ -180,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         isAuthenticated: !!user,
         refreshToken,
+        refreshUser,
       }}
     >
       {children}

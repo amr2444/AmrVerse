@@ -2,6 +2,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
 import { getUserIdFromToken } from "@/lib/auth"
+import { sendCreatorRequestToAdmin } from "@/lib/email"
 import type { ApiResponse } from "@/lib/types"
 
 interface CreatorRequest {
@@ -149,6 +150,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
                  portfolio_url, status, created_at`,
       [userId, fullName, email, presentation, motivation, portfolioUrl || null]
     )
+
+    // Envoyer l'email de notification à l'admin
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
+    const approveUrl = `${baseUrl}/api/admin/creator-requests/${createdRequest.id}?action=approve&token=${process.env.ADMIN_SECRET_TOKEN || 'dev-secret-token'}`
+    const rejectUrl = `${baseUrl}/api/admin/creator-requests/${createdRequest.id}?action=reject&token=${process.env.ADMIN_SECRET_TOKEN || 'dev-secret-token'}`
+
+    await sendCreatorRequestToAdmin({
+      userName: fullName,
+      userEmail: email,
+      motivation: motivation,
+      presentation: presentation,
+      portfolioUrl: portfolioUrl,
+      requestId: createdRequest.id,
+      approveUrl,
+      rejectUrl,
+    }).catch(error => {
+      console.error('[CreatorRequest] Failed to send admin notification:', error)
+      // Ne pas bloquer la création même si l'email échoue
+    })
 
     return NextResponse.json(
       {
