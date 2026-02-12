@@ -135,14 +135,18 @@ export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification
     });
 
     if (error) {
-      console.error('[Email] Error sending admin notification:', error);
+      console.error('[Email] ❌ Error sending admin notification:', error);
+      console.error('[Email] Error details:', JSON.stringify(error, null, 2));
       return { success: false, error };
     }
 
-    console.log('[Email] Admin notification sent:', emailData?.id);
+    console.log('[Email] ✅ Admin notification sent successfully!');
+    console.log('[Email] Email ID:', emailData?.id);
     return { success: true, data: emailData };
-  } catch (error) {
-    console.error('[Email] Failed to send admin notification:', error);
+  } catch (error: any) {
+    console.error('[Email] ❌ Failed to send admin notification:', error);
+    console.error('[Email] Error message:', error?.message);
+    console.error('[Email] Error stack:', error?.stack);
     return { success: false, error };
   }
 }
