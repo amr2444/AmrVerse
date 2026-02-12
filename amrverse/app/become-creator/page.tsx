@@ -24,6 +24,7 @@ export default function BecomeCreatorPage() {
   const [formData, setFormData] = useState({
     fullName: "",
     email: user?.email || "",
+    presentation: "",
     motivation: "",
     portfolioUrl: "",
   })
@@ -106,6 +107,18 @@ export default function BecomeCreatorPage() {
     setLoading(true)
 
     // Validation
+    if (!formData.fullName || !formData.email) {
+      setError("Veuillez remplir tous les champs obligatoires")
+      setLoading(false)
+      return
+    }
+    
+    if (formData.presentation.length < 50) {
+      setError("Votre présentation doit contenir au moins 50 caractères")
+      setLoading(false)
+      return
+    }
+    
     if (formData.motivation.length < 50) {
       setError("Votre motivation doit contenir au moins 50 caractères")
       setLoading(false)
@@ -286,16 +299,65 @@ export default function BecomeCreatorPage() {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-            {/* Motivation - Zone de texte principale */}
+            {/* Nom complet */}
             <div>
               <label className="block text-sm font-semibold mb-2">
-                Pourquoi voulez-vous devenir créateur ? <span className="text-red-500">*</span>
+                Nom complet <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="text"
+                value={formData.fullName}
+                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                placeholder="Votre nom complet"
+                required
+                disabled={loading}
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">
+                Email <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="votre@email.com"
+                required
+                disabled={loading}
+              />
+            </div>
+
+            {/* Présentation - Qui êtes-vous ? */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">
+                Présentez-vous <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                value={formData.presentation}
+                onChange={(e) => setFormData({ ...formData, presentation: e.target.value })}
+                placeholder="Qui êtes-vous ? Parlez-nous de votre parcours, votre expérience en création de manhwa, votre style artistique..."
+                rows={5}
+                required
+                disabled={loading}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                {formData.presentation.length}/50 caractères minimum
+              </p>
+            </div>
+
+            {/* Motivation - Ce que vous voulez apporter */}
+            <div>
+              <label className="block text-sm font-semibold mb-2">
+                Qu'allez-vous apporter à la communauté ? <span className="text-red-500">*</span>
               </label>
               <Textarea
                 value={formData.motivation}
                 onChange={(e) => setFormData({ ...formData, motivation: e.target.value })}
-                placeholder="Parlez-nous de votre passion, vos projets de manhwa, et ce que vous voulez apporter à la communauté AmrVerse. Soyez authentique et détaillé !"
-                rows={8}
+                placeholder="Quels types de manhwas voulez-vous créer ? Quels thèmes allez-vous explorer ? Comment allez-vous contribuer à AmrVerse ?"
+                rows={5}
                 required
                 disabled={loading}
                 className="resize-none"
@@ -353,7 +415,7 @@ export default function BecomeCreatorPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={loading || formData.motivation.length < 50}
+                disabled={loading || formData.presentation.length < 50 || formData.motivation.length < 50 || !formData.fullName || !formData.email}
                 className="flex-1"
               >
                 {loading ? (
