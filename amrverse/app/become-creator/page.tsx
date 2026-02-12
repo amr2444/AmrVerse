@@ -29,6 +29,13 @@ export default function BecomeCreatorPage() {
     portfolioUrl: "",
   })
 
+  // Mettre à jour l'email quand l'utilisateur se connecte
+  useEffect(() => {
+    if (user?.email && !formData.email) {
+      setFormData(prev => ({ ...prev, email: user.email }))
+    }
+  }, [user])
+
   // Vérifier si l'utilisateur a déjà une demande
   useEffect(() => {
     if (!user || !token) {
@@ -86,18 +93,23 @@ export default function BecomeCreatorPage() {
   }
 
   const handleOpenDialog = () => {
+    console.log('[BecomeCreator] Opening dialog...', { user, showDialog })
+    
     // Ouvrir le dialog seulement si l'utilisateur est connecté
     if (!user) {
+      console.log('[BecomeCreator] No user, redirecting to auth')
       router.push("/auth")
       return
     }
     
     // Si déjà créateur, rediriger
     if (user.isCreator) {
+      console.log('[BecomeCreator] User is already creator, redirecting')
       router.push("/admin/upload-content")
       return
     }
     
+    console.log('[BecomeCreator] Setting showDialog to true')
     setShowDialog(true)
   }
 
