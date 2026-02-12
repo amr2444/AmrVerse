@@ -748,7 +748,7 @@ export default function Home() {
               </div>
 
               <Button 
-                onClick={() => typeof window !== "undefined" && (window.location.href = "/auth")}
+                onClick={() => typeof window !== "undefined" && (window.location.href = "/become-creator")}
                 className="group bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 text-white rounded-xl px-8 py-6 text-lg font-bold shadow-lg shadow-purple-500/25 h-auto"
               >
                 Devenir Créateur
