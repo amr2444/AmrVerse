@@ -45,13 +45,20 @@ interface CreatorRejectionNotification {
 
 export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification) {
   try {
+    console.log('[Email] Starting sendCreatorRequestToAdmin...');
+    console.log('[Email] RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
+    console.log('[Email] RESEND_FROM_EMAIL:', process.env.RESEND_FROM_EMAIL || FROM_EMAIL);
+    console.log('[Email] ADMIN_EMAIL:', ADMIN_EMAIL);
+    
     // Skip if no API key configured
     if (!process.env.RESEND_API_KEY) {
-      console.log('[Email] Skipping email (no API key configured)');
+      console.warn('[Email] ⚠️ No RESEND_API_KEY found - email will not be sent');
       return { success: true };
     }
 
     const client = getResendClient();
+    console.log('[Email] Resend client initialized');
+    
     const { data: emailData, error } = await client.emails.send({
       from: FROM_EMAIL,
       to: ADMIN_EMAIL,

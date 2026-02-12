@@ -157,11 +157,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     )
 
     // Envoyer l'email de notification à l'admin
+    console.log('[CreatorRequest] Preparing to send admin notification email...');
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
     const approveUrl = `${baseUrl}/api/admin/creator-requests/${createdRequest.id}?action=approve&token=${process.env.ADMIN_SECRET_TOKEN || 'dev-secret-token'}`
     const rejectUrl = `${baseUrl}/api/admin/creator-requests/${createdRequest.id}?action=reject&token=${process.env.ADMIN_SECRET_TOKEN || 'dev-secret-token'}`
 
-    await sendCreatorRequestToAdmin({
+    const emailResult = await sendCreatorRequestToAdmin({
       userName: fullName,
       userEmail: email,
       motivation: motivation,
@@ -171,9 +172,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       approveUrl,
       rejectUrl,
     }).catch(error => {
-      console.error('[CreatorRequest] Failed to send admin notification:', error)
+      console.error('[CreatorRequest] ❌ Failed to send admin notification:', error)
       // Ne pas bloquer la création même si l'email échoue
+      return { success: false, error: String(error) }
     })
+    
+    console.log('[CreatorRequest] Email send result:', emailResult)
 
     return NextResponse.json(
       {
