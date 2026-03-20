@@ -15,6 +15,7 @@ export interface User {
   avatarUrl?: string
   bio?: string
   isCreator: boolean
+  isAdmin: boolean
   createdAt: Date
   updatedAt: Date
 }

@@ -35,7 +35,7 @@ interface DashboardData {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, isLoading, logout, isAuthenticated, token } = useAuth()
+  const { user, isLoading, logout, isAuthenticated } = useAuth()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isFetching, setIsFetching] = useState(true)
 
@@ -46,19 +46,15 @@ export default function DashboardPage() {
   }, [isLoading, isAuthenticated, router])
 
   useEffect(() => {
-    if (isAuthenticated && user?.id && token) {
+    if (isAuthenticated && user?.id) {
       fetchDashboardData()
     }
-  }, [isAuthenticated, user?.id, token])
+  }, [isAuthenticated, user?.id])
 
   const fetchDashboardData = async () => {
     try {
       setIsFetching(true)
-      const response = await fetch(`/api/dashboard?userId=${user?.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const response = await fetch("/api/dashboard")
       const result = await response.json()
       if (result.success) {
         setDashboardData(result.data)

@@ -283,12 +283,10 @@ export default function ReadingRoomPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
         body: JSON.stringify({
           chapterPageId: pages[currentPageIndex].id,
           roomId: room.id,
-          userId: user.id,
           comment: commentText,
           xPosition: 0,
           yPosition: 0,
@@ -315,12 +313,10 @@ export default function ReadingRoomPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
         body: JSON.stringify({
           chapterPageId: pageId,
           roomId: room.id,
-          userId: user.id,
           comment: comment,
           xPosition: xPercent,
           yPosition: yPercent,
@@ -357,15 +353,9 @@ export default function ReadingRoomPage() {
     if (!confirmed) return
 
     try {
-      const res = await fetch(
-        `/api/reading-rooms?roomId=${room.id}&hostId=${user.id}`,
-        {
-          method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
-          },
-        }
-      )
+      const res = await fetch(`/api/reading-rooms?roomId=${room.id}`, {
+        method: "DELETE",
+      })
 
       const json = await res.json()
       if (json.success) {
@@ -389,11 +379,9 @@ export default function ReadingRoomPage() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
         body: JSON.stringify({
           roomId: room.id,
-          hostId: user.id,
           scrollPosition: scrollY,
           currentPageIndex: pageIndex,
         }),

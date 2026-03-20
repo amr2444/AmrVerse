@@ -1,7 +1,8 @@
 // Email service using Resend
 import { Resend } from 'resend';
 
-const ADMIN_EMAIL = 'akef.minato@gmail.com';
+const DEFAULT_ADMIN_EMAIL = 'akef.minato@gmail.com';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.split(',').map((email) => email.trim()).find(Boolean) || DEFAULT_ADMIN_EMAIL;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
 
 // Lazy initialization to avoid build-time errors
@@ -48,11 +49,11 @@ export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification
     console.log('[Email] Starting sendCreatorRequestToAdmin...');
     console.log('[Email] RESEND_API_KEY exists:', !!process.env.RESEND_API_KEY);
     console.log('[Email] RESEND_FROM_EMAIL:', process.env.RESEND_FROM_EMAIL || FROM_EMAIL);
-    console.log('[Email] ADMIN_EMAIL:', ADMIN_EMAIL);
+    console.log('[Email] ADMIN_EMAIL configured:', !!ADMIN_EMAIL);
     
-    // Skip if no API key configured
-    if (!process.env.RESEND_API_KEY) {
-      console.warn('[Email] ⚠️ No RESEND_API_KEY found - email will not be sent');
+    // Skip if configuration is incomplete
+    if (!process.env.RESEND_API_KEY || !ADMIN_EMAIL) {
+      console.warn('[Email] ⚠️ Email configuration incomplete - admin notification skipped');
       return { success: true };
     }
 

@@ -1,6 +1,7 @@
 // Save and get reading progress
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
+import { getAuthenticatedUserId } from "@/lib/auth-request"
 import type { ApiResponse } from "@/lib/types"
 
 interface ReadingProgress {
@@ -12,8 +13,8 @@ interface ReadingProgress {
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<ReadingProgress>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
+    const userId = getAuthenticatedUserId(request)
+    if (!userId) {
       return NextResponse.json(
         {
           success: false,
@@ -25,6 +26,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
     const payload = await request.json()
 
+    if (!payload.chapterId) {
+      return NextResponse.json(
+        { success: false, error: "chapterId is required" },
+        { status: 400 },
+      )
+    }
+
     // Insert or update reading progress
     const [progress] = await sql(
       `INSERT INTO reading_progress (user_id, chapter_id, last_page_read, completed)
@@ -32,7 +40,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
        ON CONFLICT (user_id, chapter_id) DO UPDATE SET
        last_page_read = $3, completed = $4, last_read_at = NOW()
        RETURNING user_id, chapter_id, last_page_read, completed`,
-      [payload.userId, payload.chapterId, payload.lastPageRead, payload.completed],
+      [userId, payload.chapterId, payload.lastPageRead, payload.completed],
     )
 
     return NextResponse.json({
@@ -58,8 +66,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<ReadingProgress[]>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
+    const userId = getAuthenticatedUserId(request)
+    if (!userId) {
       return NextResponse.json(
         {
           success: false,
@@ -68,9 +76,6 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
         { status: 401 },
       )
     }
-
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
 
     const progress = await sql(
       `SELECT user_id, chapter_id, last_page_read, completed

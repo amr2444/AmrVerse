@@ -1,15 +1,15 @@
-// Image upload endpoint using local file system - SECURED
+// Image upload endpoint using object storage - SECURED
 import { type NextRequest, NextResponse } from "next/server"
-import { writeFile, mkdir } from "fs/promises"
-import { join, resolve, basename } from "path"
+import { del, put } from "@vercel/blob"
 import crypto from "crypto"
-import { getUserIdFromToken } from "@/lib/auth"
+import { getAuthenticatedUserId } from "@/lib/auth-request"
 import { sanitizeFilename } from "@/lib/validations"
 import type { ApiResponse } from "@/lib/types"
 
 interface UploadResponse {
   url: string
   filename: string
+  pathname: string
   size: number
   uploadedAt: Date
 }
@@ -47,8 +47,8 @@ function verifyFileSignature(buffer: Buffer, mimeType: string): boolean {
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<UploadResponse>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
+    const userId = getAuthenticatedUserId(request)
+    if (!userId) {
       return NextResponse.json(
         {
           success: false,
@@ -58,15 +58,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
-    // SECURITY FIX: Use JWT verification instead of base64 decode
-    const userId = getUserIdFromToken(token)
-    if (!userId) {
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN
+    if (!blobToken) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid or expired token",
+          error: "Object storage is not configured",
         },
-        { status: 401 },
+        { status: 500 },
       )
     }
 
@@ -127,33 +126,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const ext = ALLOWED_TYPES[file.type] // Use extension from validated MIME type
     const filename = `${timestamp}-${randomBytes}.${ext}`
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = resolve(process.cwd(), "public", "uploads")
-    await mkdir(uploadsDir, { recursive: true })
-
-    // SECURITY FIX: Ensure file path is within uploads directory
-    const filePath = resolve(uploadsDir, filename)
-    if (!filePath.startsWith(uploadsDir)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid file path",
-        },
-        { status: 400 },
-      )
-    }
-
-    await writeFile(filePath, buffer)
-
-    // Return public URL
-    const publicUrl = `/uploads/${filename}`
+    const blob = await put(`uploads/${userId}/${filename}`, buffer, {
+      access: "public",
+      addRandomSuffix: false,
+      token: blobToken,
+      contentType: file.type,
+    })
 
     return NextResponse.json(
       {
         success: true,
         data: {
-          url: publicUrl,
-          filename: filename,
+          url: blob.url,
+          filename,
+          pathname: blob.pathname,
           size: file.size,
           uploadedAt: new Date(),
         },
@@ -174,8 +160,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
 export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResponse<null>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
+    const userId = getAuthenticatedUserId(request)
+    if (!userId) {
       return NextResponse.json(
         {
           success: false,
@@ -185,15 +171,14 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
       )
     }
 
-    // SECURITY FIX: Use JWT verification
-    const userId = getUserIdFromToken(token)
-    if (!userId) {
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN
+    if (!blobToken) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid or expired token",
+          error: "Object storage is not configured",
         },
-        { status: 401 },
+        { status: 500 },
       )
     }
 
@@ -238,36 +223,18 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
       )
     }
 
-    // SECURITY FIX: Use resolve and verify path is within uploads directory
-    const uploadsDir = resolve(process.cwd(), "public", "uploads")
-    const filePath = resolve(uploadsDir, filename)
-
-    // Ensure the resolved path is still within the uploads directory
-    if (!filePath.startsWith(uploadsDir + "/") && filePath !== uploadsDir) {
+    const parsedUrl = new URL(url)
+    if (!parsedUrl.pathname.startsWith(`/uploads/${userId}/`)) {
       return NextResponse.json(
         {
           success: false,
-          error: "Access denied - path traversal attempt detected",
+          error: "Access denied",
         },
         { status: 403 },
       )
     }
 
-    // Check if file exists before deleting
-    const { unlink, access } = await import("fs/promises")
-    try {
-      await access(filePath)
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "File not found",
-        },
-        { status: 404 },
-      )
-    }
-
-    await unlink(filePath)
+    await del(url, { token: blobToken })
 
     return NextResponse.json({
       success: true,

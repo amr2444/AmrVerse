@@ -5,6 +5,7 @@ export const runtime = "nodejs"
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
 import { hashPassword, generateTokenPair } from "@/lib/auth"
+import { setAuthCookies } from "@/lib/auth-cookies"
 import { applyRateLimit, getClientIP } from "@/lib/rate-limiter"
 import { validateSignup, type SignupPayload } from "@/lib/validations"
 import type { ApiResponse, User } from "@/lib/types"
@@ -66,15 +67,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const passwordHash = hashPassword(payload.password)
 
     // Check if this email should be admin/creator
-    const adminEmails = process.env.ADMIN_EMAIL?.split(",").map(e => e.trim().toLowerCase()) || []
-    const isCreator = adminEmails.includes(payload.email.toLowerCase())
+    const adminEmails = (process.env.ADMIN_EMAIL?.split(",") || ["akef.minato@gmail.com"]).map(e => e.trim().toLowerCase())
+    const isAdmin = adminEmails.includes(payload.email.toLowerCase())
+    const isCreator = isAdmin
 
     // Create user
     const result = await sql(
-      `INSERT INTO users (email, username, password_hash, display_name, is_creator) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING id, email, username, display_name, avatar_url, bio, is_creator, created_at, updated_at`,
-      [payload.email.toLowerCase(), payload.username, passwordHash, payload.displayName || payload.username, isCreator],
+      `INSERT INTO users (email, username, password_hash, display_name, is_creator, is_admin) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING id, email, username, display_name, avatar_url, bio, is_creator, is_admin, created_at, updated_at`,
+      [payload.email.toLowerCase(), payload.username, passwordHash, payload.displayName || payload.username, isCreator, isAdmin],
     )
 
     if (!result || result.length === 0) {
@@ -85,13 +87,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
     // Generate JWT token pair (access + refresh)
     const { accessToken, refreshToken } = generateTokenPair({
-      id: newUser.id,
-      email: newUser.email,
-      username: newUser.username,
-      isCreator: newUser.is_creator,
-    })
+        id: newUser.id,
+        email: newUser.email,
+        username: newUser.username,
+        isCreator: newUser.is_creator,
+        isAdmin: newUser.is_admin,
+      })
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         data: {
@@ -103,6 +106,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
             avatarUrl: newUser.avatar_url,
             bio: newUser.bio,
             isCreator: newUser.is_creator,
+            isAdmin: newUser.is_admin,
             createdAt: newUser.created_at,
             updatedAt: newUser.updated_at,
           },
@@ -113,6 +117,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       },
       { status: 201 },
     )
+
+    setAuthCookies(response, { accessToken, refreshToken })
+    return response
   } catch (error) {
     console.error("[v0] Signup error:", error)
     const errorMessage = error instanceof Error ? error.message : "Failed to create account"

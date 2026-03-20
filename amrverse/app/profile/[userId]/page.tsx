@@ -162,9 +162,8 @@ export default function ProfilePage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
-        body: JSON.stringify({ userId: user.id, friendId: userId }),
+        body: JSON.stringify({ friendId: userId }),
       })
 
       if (response.ok) {
@@ -182,9 +181,8 @@ export default function ProfilePage() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
-        body: JSON.stringify({ userId: user.id, friendId, action: "accept" }),
+        body: JSON.stringify({ friendId, action: "accept" }),
       })
 
       if (response.ok) {
@@ -204,9 +202,8 @@ export default function ProfilePage() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
-        body: JSON.stringify({ userId: user.id, friendId, action: "reject" }),
+        body: JSON.stringify({ friendId, action: "reject" }),
       })
 
       if (response.ok) {
@@ -250,9 +247,8 @@ export default function ProfilePage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
-        body: JSON.stringify({ userId: user.id, friendId }),
+        body: JSON.stringify({ friendId }),
       })
 
       if (response.ok) {

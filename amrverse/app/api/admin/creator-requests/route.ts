@@ -1,7 +1,7 @@
 // API Admin pour gérer toutes les demandes créateurs
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { getUserFromToken } from "@/lib/auth"
+import { getAuthenticatedUser } from "@/lib/auth-request"
 import type { ApiResponse } from "@/lib/types"
 
 interface AdminCreatorRequest {
@@ -24,15 +24,7 @@ interface AdminCreatorRequest {
 // GET - Récupérer toutes les demandes (admin uniquement)
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<AdminCreatorRequest[]>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
-      )
-    }
-
-    const user = await getUserFromToken(token, sql)
+    const user = await getAuthenticatedUser(request, sql)
     if (!user) {
       return NextResponse.json(
         { success: false, error: "Invalid token" },
@@ -40,15 +32,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
       )
     }
 
-    // Vérifier si l'utilisateur est admin (vous devrez ajouter un champ is_admin dans la table users)
-    // Pour l'instant, on vérifie juste s'il est créateur
-    const [adminUser] = await sql(
-      "SELECT is_creator FROM users WHERE id = $1",
-      [user.id]
-    )
-
-    // TODO: Remplacer par is_admin quand vous ajouterez cette colonne
-    if (!adminUser?.is_creator) {
+    if (!user.isAdmin) {
       return NextResponse.json(
         { success: false, error: "Admin access required" },
         { status: 403 },

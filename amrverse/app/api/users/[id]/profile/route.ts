@@ -1,6 +1,7 @@
 // Get user profile with stats
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
+import { getAuthenticatedUserId } from "@/lib/auth-request"
 import type { ApiResponse, UserProfile } from "@/lib/types"
 
 export async function GET(
@@ -10,7 +11,7 @@ export async function GET(
   try {
     const { id } = await params
     const [user] = await sql(
-      `SELECT id, email, username, display_name, avatar_url, bio, is_creator, created_at, updated_at
+      `SELECT id, email, username, display_name, avatar_url, bio, is_creator, is_admin, created_at, updated_at
        FROM users WHERE id = $1`,
       [id],
     )
@@ -49,6 +50,7 @@ export async function GET(
         avatarUrl: user.avatar_url,
         bio: user.bio,
         isCreator: user.is_creator,
+        isAdmin: user.is_admin,
         favoriteCount: Number.parseInt(favoriteCount.count),
         friendCount: Number.parseInt(friendCount.count),
         totalChaptersRead: Number.parseInt(progressCount.count),
@@ -74,26 +76,12 @@ export async function PATCH(
 ): Promise<NextResponse<ApiResponse<UserProfile>>> {
   try {
     const { id } = await params
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized",
-        },
-        { status: 401 },
-      )
-    }
-
-    // SECURITY FIX: Import and verify token, then check if user owns this profile
-    const { getUserIdFromToken } = await import("@/lib/auth")
-    const tokenUserId = getUserIdFromToken(token)
-    
+    const tokenUserId = getAuthenticatedUserId(request)
     if (!tokenUserId) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid or expired token",
+          error: "Unauthorized",
         },
         { status: 401 },
       )
@@ -119,7 +107,7 @@ export async function PATCH(
            bio = COALESCE($3, bio),
            updated_at = NOW()
        WHERE id = $4
-       RETURNING id, email, username, display_name, avatar_url, bio, is_creator, created_at, updated_at`,
+       RETURNING id, email, username, display_name, avatar_url, bio, is_creator, is_admin, created_at, updated_at`,
       [payload.displayName, payload.avatarUrl, payload.bio, id],
     )
 
@@ -153,6 +141,7 @@ export async function PATCH(
         avatarUrl: updatedUser.avatar_url,
         bio: updatedUser.bio,
         isCreator: updatedUser.is_creator,
+        isAdmin: updatedUser.is_admin,
         favoriteCount: Number.parseInt(favoriteCount.count),
         friendCount: Number.parseInt(friendCount.count),
         totalChaptersRead: Number.parseInt(progressCount.count),

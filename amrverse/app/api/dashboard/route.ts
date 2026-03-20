@@ -1,6 +1,7 @@
 // Dashboard data API - Get user's reading progress, favorites, and active rooms
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
+import { getAuthenticatedUser } from "@/lib/auth-request"
 import type { ApiResponse, Manhwa, ReadingRoom } from "@/lib/types"
 
 interface ReadingHistoryItem {
@@ -30,23 +31,14 @@ interface DashboardData {
 
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<DashboardData>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
+    const user = await getAuthenticatedUser(request, sql)
+    if (!user) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
       )
     }
-
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("userId")
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "Missing userId" },
-        { status: 400 }
-      )
-    }
+    const userId = user.id
 
     // Get reading history with manhwa and chapter details
     const readingHistory = await sql(

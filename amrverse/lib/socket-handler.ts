@@ -1,5 +1,6 @@
 // WebSocket event handlers for reading rooms - SECURED with JWT authentication
 import type { Server, Socket } from "socket.io"
+import { ACCESS_TOKEN_COOKIE_NAME } from "@/lib/auth-cookies"
 import type { ScrollEvent } from "@/lib/types"
 import { verifyAccessToken, type JWTPayload } from "@/lib/auth"
 import { sanitizeInput } from "@/lib/validations"
@@ -63,7 +64,16 @@ function checkSocketRateLimit(socketId: string): boolean {
 export function initializeSocketHandlers(io: Server) {
   // SECURITY FIX: Add authentication middleware
   io.use((socket: AuthenticatedSocket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "")
+    const cookieHeader = socket.handshake.headers?.cookie || ""
+    const accessCookie = cookieHeader
+      .split(";")
+      .map((cookie) => cookie.trim())
+      .find((cookie) => cookie.startsWith(`${ACCESS_TOKEN_COOKIE_NAME}=`))
+      ?.split("=")
+      .slice(1)
+      .join("=")
+
+    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace("Bearer ", "") || accessCookie
 
     if (!token) {
       console.log("[Socket] Connection rejected: No token provided")

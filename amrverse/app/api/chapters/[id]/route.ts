@@ -1,6 +1,7 @@
 // Manage individual chapter (GET, DELETE, PATCH)
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
+import { getAuthenticatedUser } from "@/lib/auth-request"
 import type { ApiResponse, Chapter } from "@/lib/types"
 
 // Get single chapter
@@ -52,17 +53,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse<ApiResponse<{ deleted: boolean }>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized - Please login" },
-        { status: 401 },
-      )
-    }
-
-    // Verify user from token
-    const { getUserFromToken } = await import("@/lib/auth")
-    const user = await getUserFromToken(token, sql)
+    const user = await getAuthenticatedUser(request, sql)
 
     if (!user) {
       return NextResponse.json(
@@ -140,17 +131,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse<ApiResponse<Chapter>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized - Please login" },
-        { status: 401 },
-      )
-    }
-
-    // Verify user from token
-    const { getUserFromToken } = await import("@/lib/auth")
-    const user = await getUserFromToken(token, sql)
+    const user = await getAuthenticatedUser(request, sql)
 
     if (!user) {
       return NextResponse.json(

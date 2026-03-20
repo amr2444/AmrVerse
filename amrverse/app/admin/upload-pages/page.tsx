@@ -116,7 +116,6 @@ function UploadPagesContent() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
         body: JSON.stringify({ pages: pagesData }),
       })
@@ -153,7 +152,6 @@ function UploadPagesContent() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
         },
         body: JSON.stringify({
           chapterNumber: parseInt(newChapterData.number),

@@ -1,6 +1,7 @@
 // Get all manhwas with pagination
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
+import { getAuthenticatedUser } from "@/lib/auth-request"
 import type { ApiResponse, PaginatedResponse, Manhwa } from "@/lib/types"
 
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<PaginatedResponse<Manhwa>>>> {
@@ -64,20 +65,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 // Create new manhwa (creator only)
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<Manhwa>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Unauthorized - Please login",
-        },
-        { status: 401 },
-      )
-    }
-
-    // Verify user from token
-    const { getUserFromToken } = await import("@/lib/auth")
-    const user = await getUserFromToken(token, sql)
+    const user = await getAuthenticatedUser(request, sql)
     
     if (!user) {
       return NextResponse.json(

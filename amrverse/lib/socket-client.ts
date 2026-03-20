@@ -6,14 +6,6 @@ import { io, type Socket } from "socket.io-client"
 let socket: Socket | null = null
 
 /**
- * Get the current auth token from localStorage
- */
-function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem("amrverse_token")
-}
-
-/**
  * Initialize socket connection with JWT authentication
  * The token is sent during the handshake for server-side verification
  */
@@ -29,23 +21,14 @@ export function initializeSocket(): Socket {
     socket = null
   }
 
-  const token = getAuthToken()
-  
-  if (!token) {
-    console.warn("[Socket] No auth token available - socket connection may fail")
-  }
-
   socket = io(undefined, {
     path: "/api/socket",
     addTrailingSlash: false,
+    withCredentials: true,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: 5,
-    // SECURITY FIX: Send JWT token for authentication
-    auth: {
-      token: token,
-    },
   })
 
   socket.on("connect", () => {

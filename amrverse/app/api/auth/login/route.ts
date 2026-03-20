@@ -5,6 +5,7 @@ export const runtime = "nodejs"
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
 import { verifyPassword, generateTokenPair } from "@/lib/auth"
+import { setAuthCookies } from "@/lib/auth-cookies"
 import { applyRateLimit, getClientIP, createRateLimitHeaders, resetRateLimit } from "@/lib/rate-limiter"
 import type { LoginPayload } from "@/lib/validations"
 import type { ApiResponse, User } from "@/lib/types"
@@ -32,20 +33,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     }
 
     // Check if this email should be admin/creator
-    const adminEmails = process.env.ADMIN_EMAIL?.split(",").map(e => e.trim().toLowerCase()) || []
-    const shouldBeCreator = adminEmails.includes(payload.email.toLowerCase())
+    const adminEmails = (process.env.ADMIN_EMAIL?.split(",") || ["akef.minato@gmail.com"]).map(e => e.trim().toLowerCase())
+    const isAdmin = adminEmails.includes(payload.email.toLowerCase())
 
-    // If user is in ADMIN_EMAIL list but not yet creator, update them
-    if (shouldBeCreator) {
+    if (isAdmin) {
       await sql(
-        `UPDATE users SET is_creator = true WHERE email = $1 AND is_creator = false`,
+        `UPDATE users SET is_creator = true, is_admin = true WHERE email = $1 AND (is_creator = false OR is_admin = false)`,
         [payload.email.toLowerCase()]
       )
     }
 
     // Find user by email
     const [user] = await sql(
-      `SELECT id, email, username, password_hash, display_name, avatar_url, bio, is_creator, created_at, updated_at 
+      `SELECT id, email, username, password_hash, display_name, avatar_url, bio, is_creator, is_admin, created_at, updated_at 
        FROM users WHERE email = $1`,
       [payload.email.toLowerCase()],
     )
@@ -73,16 +73,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 
     // Generate JWT token pair (access + refresh)
     const { accessToken, refreshToken } = generateTokenPair({
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      isCreator: user.is_creator,
-    })
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        isCreator: user.is_creator,
+        isAdmin: user.is_admin,
+      })
 
     // Reset rate limit on successful login
     resetRateLimit(clientIP, "auth")
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         data: {
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
             avatarUrl: user.avatar_url,
             bio: user.bio,
             isCreator: user.is_creator,
+            isAdmin: user.is_admin,
             createdAt: user.created_at,
             updatedAt: user.updated_at,
           },
@@ -104,6 +106,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       },
       { status: 200 },
     )
+
+    setAuthCookies(response, { accessToken, refreshToken })
+    return response
   } catch (error) {
     console.error("[v0] Login error:", error)
     return NextResponse.json(

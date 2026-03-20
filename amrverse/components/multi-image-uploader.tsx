@@ -175,9 +175,6 @@ export function MultiImageUploader({
 
           const response = await fetch("/api/upload", {
             method: "POST",
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
-            },
             body: formData,
           })
 

@@ -11,7 +11,7 @@ import type { Manhwa } from "@/lib/types"
 
 export default function LibraryPage() {
   const router = useRouter()
-  const { user, isLoading, logout, isAuthenticated, token } = useAuth()
+  const { user, isLoading, logout, isAuthenticated } = useAuth()
   const [manhwas, setManhwas] = useState<Manhwa[]>([])
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [isFetching, setIsFetching] = useState(true)
@@ -25,10 +25,10 @@ export default function LibraryPage() {
 
   useEffect(() => {
     // Fetch user's favorites when authenticated
-    if (isAuthenticated && user?.id && token) {
+    if (isAuthenticated && user?.id) {
       fetchFavorites()
     }
-  }, [isAuthenticated, user?.id, token])
+  }, [isAuthenticated, user?.id])
 
   const fetchManhwas = async () => {
     try {
@@ -46,11 +46,7 @@ export default function LibraryPage() {
 
   const fetchFavorites = async () => {
     try {
-      const response = await fetch(`/api/favorites?userId=${user?.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const response = await fetch("/api/favorites")
       const result = await response.json()
       if (result.success) {
         setFavorites(new Set(result.data.favorites))
@@ -75,11 +71,8 @@ export default function LibraryPage() {
 
       if (isFavorite) {
         // Remove from favorites
-        const response = await fetch(`/api/favorites?userId=${user?.id}&manhwaId=${manhwaId}`, {
+        const response = await fetch(`/api/favorites?manhwaId=${manhwaId}`, {
           method: "DELETE",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         })
         if (response.ok) {
           setFavorites((prev) => {
@@ -94,9 +87,8 @@ export default function LibraryPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ userId: user?.id, manhwaId }),
+          body: JSON.stringify({ manhwaId }),
         })
         if (response.ok) {
           setFavorites((prev) => new Set(prev).add(manhwaId))

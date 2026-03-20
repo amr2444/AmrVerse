@@ -1,8 +1,9 @@
 // API Admin pour approuver/rejeter une demande créateur
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { getUserFromToken } from "@/lib/auth"
+import { verifyAdminActionToken } from "@/lib/auth"
 import { sendCreatorApprovalEmail, sendCreatorRejectionEmail } from "@/lib/email"
+import { getAuthenticatedUser } from "@/lib/auth-request"
 import type { ApiResponse } from "@/lib/types"
 
 interface ApprovalResponse {
@@ -19,10 +20,10 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     const action = searchParams.get("action")
     const token = searchParams.get("token")
+    const { id } = await params
 
-    // Vérifier le token admin
-    const adminToken = process.env.ADMIN_SECRET_TOKEN || 'dev-secret-token'
-    if (!token || token !== adminToken) {
+    const actionPayload = token ? verifyAdminActionToken(token) : null
+    if (!actionPayload || actionPayload.requestId !== id || actionPayload.action !== action) {
       return new NextResponse(
         `<html><body style="font-family: sans-serif; text-align: center; padding: 50px;">
           <h1>❌ Accès non autorisé</h1>
@@ -41,8 +42,6 @@ export async function GET(
         { status: 400, headers: { "Content-Type": "text/html" } }
       )
     }
-
-    const { id } = await params
 
     // Récupérer la demande
     const [creatorRequest] = await sql(
@@ -152,15 +151,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ApiResponse<ApprovalResponse>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
-      )
-    }
-
-    const user = await getUserFromToken(token, sql)
+    const user = await getAuthenticatedUser(request, sql)
     if (!user) {
       return NextResponse.json(
         { success: false, error: "Invalid token" },
@@ -168,13 +159,7 @@ export async function PATCH(
       )
     }
 
-    // Vérifier si admin
-    const [adminUser] = await sql(
-      "SELECT is_admin FROM users WHERE id = $1",
-      [user.id]
-    )
-
-    if (!adminUser?.is_admin) {
+    if (!user.isAdmin) {
       return NextResponse.json(
         { success: false, error: "Admin access required" },
         { status: 403 },

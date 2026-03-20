@@ -1,10 +1,19 @@
 // Get and manage room participants
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
+import { getAuthenticatedUserId } from "@/lib/auth-request"
 import type { ApiResponse, RoomParticipant } from "@/lib/types"
 
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<RoomParticipant[]>>> {
   try {
+    const userId = getAuthenticatedUserId(request)
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const roomId = searchParams.get("roomId")
 
@@ -15,6 +24,22 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           error: "roomId is required",
         },
         { status: 400 },
+      )
+    }
+
+    const [membership] = await sql(
+      `SELECT 1
+       FROM reading_rooms rr
+       LEFT JOIN room_participants rp ON rr.id = rp.room_id AND rp.user_id = $2
+       WHERE rr.id = $1 AND (rr.host_id = $2 OR rp.user_id = $2)
+       LIMIT 1`,
+      [roomId, userId],
+    )
+
+    if (!membership) {
+      return NextResponse.json(
+        { success: false, error: "Forbidden" },
+        { status: 403 },
       )
     }
 
@@ -52,14 +77,41 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<RoomParticipant>>> {
   try {
+    const userId = getAuthenticatedUserId(request)
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      )
+    }
+
     const payload = await request.json()
+
+    if (!payload.roomId) {
+      return NextResponse.json(
+        { success: false, error: "roomId is required" },
+        { status: 400 },
+      )
+    }
+
+    const [room] = await sql(
+      `SELECT id, is_active, expires_at FROM reading_rooms WHERE id = $1`,
+      [payload.roomId],
+    )
+
+    if (!room || !room.is_active) {
+      return NextResponse.json(
+        { success: false, error: "Room not found or inactive" },
+        { status: 404 },
+      )
+    }
 
     const [participant] = await sql(
       `INSERT INTO room_participants (room_id, user_id)
        VALUES ($1, $2)
        ON CONFLICT (room_id, user_id) DO UPDATE SET last_seen = NOW()
        RETURNING id, room_id, user_id, joined_at, last_seen`,
-      [payload.roomId, payload.userId],
+      [payload.roomId, userId],
     )
 
     return NextResponse.json({

@@ -32,7 +32,7 @@ interface CreatorRequest {
 
 export default function AdminCreatorRequestsPage() {
   const router = useRouter()
-  const { user, token } = useAuth()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [requests, setRequests] = useState<CreatorRequest[]>([])
   const [selectedTab, setSelectedTab] = useState("pending")
@@ -40,29 +40,23 @@ export default function AdminCreatorRequestsPage() {
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    if (!user || !token) {
+    if (!user) {
       router.push("/auth")
       return
     }
 
-    // Vérifier si l'utilisateur est créateur (ou admin)
-    // TODO: Ajouter un vrai champ is_admin
-    if (!user.isCreator) {
+    if (!user.isAdmin) {
       router.push("/dashboard")
       return
     }
 
     loadRequests("pending")
-  }, [user, token])
+  }, [user])
 
   const loadRequests = async (status: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/creator-requests?status=${status}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const res = await fetch(`/api/admin/creator-requests?status=${status}`)
 
       if (res.ok) {
         const data = await res.json()
@@ -92,7 +86,6 @@ export default function AdminCreatorRequestsPage() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           action,

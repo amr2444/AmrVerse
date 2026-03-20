@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: amrverse
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            amrverse/package.json
+            amrverse/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build application
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/amrverse
+          NEXTAUTH_SECRET: ci-secret-nextauth
+          JWT_SECRET: ci-secret-jwt
+          JWT_REFRESH_SECRET: ci-secret-refresh
+          ADMIN_EMAIL: admin@example.com
+        run: npm run build

@@ -44,12 +44,19 @@ export interface JWTPayload {
   email: string
   username: string
   isCreator: boolean
+  isAdmin: boolean
   type: "access" | "refresh"
 }
 
 export interface TokenPair {
   accessToken: string
   refreshToken: string
+}
+
+export interface AdminActionPayload {
+  requestId: string
+  action: "approve" | "reject"
+  type: "admin-action"
 }
 
 export interface AuthenticatedUser {
@@ -60,6 +67,9 @@ export interface AuthenticatedUser {
   avatarUrl: string | null
   bio: string | null
   isCreator: boolean
+  isAdmin: boolean
+  createdAt: Date
+  updatedAt: Date
 }
 
 // ============================================================================
@@ -121,12 +131,14 @@ export function generateTokenPair(user: {
   email: string
   username: string
   isCreator: boolean
+  isAdmin: boolean
 }): TokenPair {
   const accessPayload: JWTPayload = {
     userId: user.id,
     email: user.email,
     username: user.username,
     isCreator: user.isCreator,
+    isAdmin: user.isAdmin,
     type: "access"
   }
 
@@ -135,6 +147,7 @@ export function generateTokenPair(user: {
     email: user.email,
     username: user.username,
     isCreator: user.isCreator,
+    isAdmin: user.isAdmin,
     type: "refresh"
   }
 
@@ -202,6 +215,7 @@ export function refreshAccessToken(refreshToken: string): string | null {
     email: payload.email,
     username: payload.username,
     isCreator: payload.isCreator,
+    isAdmin: payload.isAdmin,
     type: "access"
   }
 
@@ -220,6 +234,36 @@ export function refreshAccessToken(refreshToken: string): string | null {
  */
 export function generateToken(length = 32): string {
   return crypto.randomBytes(length).toString("hex")
+}
+
+export function generateAdminActionToken(payload: Omit<AdminActionPayload, "type">): string {
+  return jwt.sign(
+    {
+      ...payload,
+      type: "admin-action",
+    },
+    JWT_SECRET,
+    {
+      expiresIn: "1h",
+      algorithm: "HS256",
+    },
+  )
+}
+
+export function verifyAdminActionToken(token: string): AdminActionPayload | null {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET, {
+      algorithms: ["HS256"],
+    }) as AdminActionPayload
+
+    if (decoded.type !== "admin-action") {
+      return null
+    }
+
+    return decoded
+  } catch {
+    return null
+  }
 }
 
 // ============================================================================
@@ -262,7 +306,7 @@ export async function getUserFromToken(
 
     // Fetch fresh user data from database
     const [user] = await db(
-      `SELECT id, email, username, display_name, avatar_url, bio, is_creator 
+      `SELECT id, email, username, display_name, avatar_url, bio, is_creator, is_admin, created_at, updated_at 
        FROM users WHERE id = $1`,
       [payload.userId]
     ) as any[]
@@ -276,7 +320,10 @@ export async function getUserFromToken(
       displayName: user.display_name,
       avatarUrl: user.avatar_url,
       bio: user.bio,
-      isCreator: user.is_creator
+      isCreator: user.is_creator,
+      isAdmin: user.is_admin,
+      createdAt: user.created_at,
+      updatedAt: user.updated_at,
     }
   } catch (error) {
     console.error("Token verification error:", error)

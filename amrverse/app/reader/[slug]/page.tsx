@@ -12,7 +12,7 @@ import type { Manhwa, Chapter, ChapterPage } from "@/lib/types"
 export default function ReaderPage() {
   const router = useRouter()
   const params = useParams()
-  const { user, isLoading, logout, isAuthenticated, token } = useAuth()
+  const { user, isLoading, logout, isAuthenticated } = useAuth()
   const [manhwa, setManhwa] = useState<Manhwa | null>(null)
   const [chapters, setChapters] = useState<Chapter[]>([])
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null)
@@ -99,10 +99,8 @@ export default function ReaderPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          userId: user.id,
           chapterId: selectedChapter.id,
           lastPageRead: currentPageIndex,
           completed: currentPageIndex === pages.length - 1,
@@ -111,7 +109,7 @@ export default function ReaderPage() {
     } catch (error) {
       console.error("[v0] Failed to save progress:", error)
     }
-  }, [user, selectedChapter, currentPageIndex, pages.length, token])
+  }, [user, selectedChapter, currentPageIndex, pages.length])
 
   const handleChapterChange = async (chapter: Chapter) => {
     setSelectedChapter(chapter)

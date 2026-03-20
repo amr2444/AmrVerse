@@ -1,7 +1,7 @@
 // Add/Remove favorites - SECURED: userId extracted from JWT token
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { getUserIdFromToken } from "@/lib/auth"
+import { getAuthenticatedUserId } from "@/lib/auth-request"
 import type { ApiResponse } from "@/lib/types"
 
 interface FavoriteResponse {
@@ -13,19 +13,10 @@ interface FavoriteResponse {
 // Add to favorites
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<FavoriteResponse>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      )
-    }
-
-    // SECURITY FIX: Extract userId from JWT token instead of request body
-    const userId = getUserIdFromToken(token)
+    const userId = getAuthenticatedUserId(request)
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "Invalid or expired token" },
+        { success: false, error: "Unauthorized" },
         { status: 401 }
       )
     }
@@ -62,19 +53,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
 // Remove from favorites
 export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResponse<FavoriteResponse>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      )
-    }
-
-    // SECURITY FIX: Extract userId from JWT token instead of query params
-    const userId = getUserIdFromToken(token)
+    const userId = getAuthenticatedUserId(request)
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "Invalid or expired token" },
+        { success: false, error: "Unauthorized" },
         { status: 401 }
       )
     }
@@ -110,19 +92,10 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
 // Get user's favorites
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<{ favorites: string[] }>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 }
-      )
-    }
-
-    // SECURITY FIX: Extract userId from JWT token instead of query params
-    const userId = getUserIdFromToken(token)
+    const userId = getAuthenticatedUserId(request)
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "Invalid or expired token" },
+        { success: false, error: "Unauthorized" },
         { status: 401 }
       )
     }

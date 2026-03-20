@@ -18,27 +18,25 @@ interface User {
 
 export default function SearchUsersPage() {
   const router = useRouter()
-  const { user, token } = useAuth()
+  const { user } = useAuth()
   const [query, setQuery] = useState("")
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
   const [addingId, setAddingId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!user || !token) {
+    if (!user) {
       router.push("/auth")
       return
     }
-  }, [user, token])
+  }, [user])
 
   const searchUsers = async () => {
     if (!query.trim()) return
 
     setLoading(true)
     try {
-      const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      const res = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`)
       
       if (res.ok) {
         const data = await res.json()
@@ -59,7 +57,6 @@ export default function SearchUsersPage() {
       const res = await fetch('/api/friends', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ friendId })

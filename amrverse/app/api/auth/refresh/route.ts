@@ -4,11 +4,17 @@ export const runtime = "nodejs"
 
 import { type NextRequest, NextResponse } from "next/server"
 import { refreshAccessToken, verifyRefreshToken } from "@/lib/auth"
+import { getRefreshTokenFromRequest, setAccessTokenCookie } from "@/lib/auth-cookies"
 import type { ApiResponse } from "@/lib/types"
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ accessToken: string }>>> {
   try {
-    const { refreshToken } = await request.json()
+    let refreshToken = getRefreshTokenFromRequest(request)
+
+    if (!refreshToken) {
+      const body = await request.json().catch(() => null)
+      refreshToken = body?.refreshToken || null
+    }
 
     if (!refreshToken) {
       return NextResponse.json(
@@ -44,7 +50,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         data: {
@@ -54,6 +60,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       },
       { status: 200 },
     )
+
+    setAccessTokenCookie(response, newAccessToken)
+    return response
   } catch (error) {
     console.error("[v0] Token refresh error:", error)
     return NextResponse.json(

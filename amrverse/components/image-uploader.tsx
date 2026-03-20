@@ -51,9 +51,6 @@ export function ImageUploader({ onUpload, disabled = false, isLoading = false }:
 
       const response = await fetch("/api/upload", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("amrverse_token")}`,
-        },
         body: formData,
       })
 

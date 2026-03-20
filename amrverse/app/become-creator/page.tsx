@@ -13,7 +13,7 @@ import { Logo } from "@/components/logo"
 
 export default function BecomeCreatorPage() {
   const router = useRouter()
-  const { user, token, refreshUser } = useAuth()
+  const { user, refreshUser } = useAuth()
   const [loading, setLoading] = useState(false)
   const [checkingStatus, setCheckingStatus] = useState(true)
   const [error, setError] = useState("")
@@ -38,7 +38,7 @@ export default function BecomeCreatorPage() {
 
   // Vérifier si l'utilisateur a déjà une demande
   useEffect(() => {
-    if (!user || !token) {
+    if (!user) {
       router.push("/auth?redirect=/become-creator")
       return
     }
@@ -50,7 +50,13 @@ export default function BecomeCreatorPage() {
     }
 
     checkExistingRequest()
-  }, [user, token])
+  }, [user])
+
+  useEffect(() => {
+    if (user?.isCreator) {
+      router.push("/admin/upload-content")
+    }
+  }, [user?.isCreator, router])
 
   // Rafraîchir le profil utilisateur toutes les 10 secondes si la demande est en attente
   useEffect(() => {
@@ -58,14 +64,6 @@ export default function BecomeCreatorPage() {
 
     const interval = setInterval(async () => {
       await refreshUser()
-      // Après le refresh, vérifier si l'utilisateur est devenu créateur
-      const storedUser = localStorage.getItem("amrverse_user")
-      if (storedUser) {
-        const updatedUser = JSON.parse(storedUser)
-        if (updatedUser.isCreator) {
-          router.push("/admin/upload-content")
-        }
-      }
     }, 10000) // 10 secondes
 
     return () => clearInterval(interval)
@@ -73,11 +71,7 @@ export default function BecomeCreatorPage() {
 
   const checkExistingRequest = async () => {
     try {
-      const res = await fetch("/api/creator-requests", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const res = await fetch("/api/creator-requests")
 
       if (res.ok) {
         const data = await res.json()
@@ -142,7 +136,6 @@ export default function BecomeCreatorPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           fullName: formData.fullName || user?.username || "Utilisateur",

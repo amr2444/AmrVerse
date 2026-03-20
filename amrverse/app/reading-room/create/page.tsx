@@ -14,7 +14,7 @@ type TabType = "join" | "create"
 function CreateRoomContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { user, token } = useAuth()
+  const { user } = useAuth()
   
   // Tab state
   const [activeTab, setActiveTab] = useState<TabType>("join")
@@ -75,12 +75,10 @@ function CreateRoomContent() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           manhwaId,
           chapterId,
-          hostId: user.id,
           roomName: roomName || `${user.displayName || user.username}'s Room`,
           maxParticipants: Number.parseInt(maxParticipants),
         }),

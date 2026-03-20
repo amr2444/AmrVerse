@@ -1,5 +1,5 @@
 // Client-side authentication context
-// Manages user session and auth state with JWT tokens
+// Manages session state backed by secure httpOnly cookies
 
 "use client"
 
@@ -28,20 +28,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Refresh the access token using the refresh token
-  const refreshToken = useCallback(async (): Promise<boolean> => {
-    try {
-      const storedRefreshToken = localStorage.getItem("amrverse_refresh_token")
-      if (!storedRefreshToken) return false
+  const logout = useCallback(() => {
+    setUser(null)
+    setToken(null)
 
-      const response = await fetch("/api/auth/refresh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: storedRefreshToken }),
+    void fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    }).catch((error) => {
+      console.error("Logout error:", error)
+    })
+  }, [])
+
+  const loadSession = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/session", {
+        credentials: "include",
       })
 
       if (!response.ok) {
-        // Refresh token expired or invalid - logout user
+        setUser(null)
+        setToken(null)
+        return
+      }
+
+      const data = await response.json()
+      if (data.success && data.data?.user) {
+        setUser(data.data.user)
+        setToken(data.data.accessToken || null)
+      }
+    } catch (error) {
+      console.error("Session load error:", error)
+      setUser(null)
+      setToken(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const refreshToken = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+      })
+
+      if (!response.ok) {
         logout()
         return false
       }
@@ -49,7 +81,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await response.json()
       if (data.success && data.data.accessToken) {
         setToken(data.data.accessToken)
-        localStorage.setItem("amrverse_token", data.data.accessToken)
         return true
       }
 
@@ -58,27 +89,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Token refresh error:", error)
       return false
     }
-  }, [])
+  }, [logout])
 
-  // Load session from localStorage on mount
   useEffect(() => {
-    const storedToken = localStorage.getItem("amrverse_token")
-    const storedUser = localStorage.getItem("amrverse_user")
-
-    if (storedToken && storedUser) {
-      try {
-        setToken(storedToken)
-        setUser(JSON.parse(storedUser))
-      } catch (error) {
-        // Invalid stored data - clear it
-        localStorage.removeItem("amrverse_token")
-        localStorage.removeItem("amrverse_refresh_token")
-        localStorage.removeItem("amrverse_user")
-      }
-    }
-
-    setIsLoading(false)
-  }, [])
+    void loadSession()
+  }, [loadSession])
 
   // Set up automatic token refresh
   useEffect(() => {
@@ -98,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, username, password, displayName }),
       })
 
@@ -112,13 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || "Signup failed")
       }
 
-      // Store JWT tokens
       setToken(data.data.accessToken)
       setUser(data.data.user)
-
-      localStorage.setItem("amrverse_token", data.data.accessToken)
-      localStorage.setItem("amrverse_refresh_token", data.data.refreshToken)
-      localStorage.setItem("amrverse_user", JSON.stringify(data.data.user))
     } catch (error) {
       setIsLoading(false)
       throw error
@@ -133,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       })
 
@@ -147,13 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || "Login failed")
       }
 
-      // Store JWT tokens
       setToken(data.data.accessToken)
       setUser(data.data.user)
-
-      localStorage.setItem("amrverse_token", data.data.accessToken)
-      localStorage.setItem("amrverse_refresh_token", data.data.refreshToken)
-      localStorage.setItem("amrverse_user", JSON.stringify(data.data.user))
     } catch (error) {
       setIsLoading(false)
       throw error
@@ -162,36 +169,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const logout = () => {
-    setUser(null)
-    setToken(null)
-    localStorage.removeItem("amrverse_token")
-    localStorage.removeItem("amrverse_refresh_token")
-    localStorage.removeItem("amrverse_user")
-  }
-
   // Refresh user profile from the server
   const refreshUser = useCallback(async () => {
-    if (!user || !token) return
+    if (!user) return
 
     try {
-      const response = await fetch(`/api/users/${user.id}/profile`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-        },
-      })
+      const response = await fetch(`/api/users/${user.id}/profile`, { credentials: "include" })
 
       if (!response.ok) return
 
       const data = await response.json()
       if (data.success && data.data) {
         setUser(data.data)
-        localStorage.setItem("amrverse_user", JSON.stringify(data.data))
       }
     } catch (error) {
       console.error("Failed to refresh user:", error)
     }
-  }, [user, token])
+  }, [user])
 
   return (
     <AuthContext.Provider

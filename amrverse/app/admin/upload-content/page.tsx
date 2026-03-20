@@ -14,7 +14,7 @@ import type { Manhwa, Chapter } from "@/lib/types"
 
 export default function UploadContentPage() {
   const router = useRouter()
-  const { user, isLoading, logout, isAuthenticated, token } = useAuth()
+  const { user, isLoading, logout, isAuthenticated } = useAuth()
   const [mode, setMode] = useState<"select" | "create">("select") // Mode: select existing or create new
   const [existingManhwas, setExistingManhwas] = useState<Manhwa[]>([])
   const [filteredManhwas, setFilteredManhwas] = useState<Manhwa[]>([])
@@ -126,15 +126,10 @@ export default function UploadContentPage() {
   }
 
   const handleDeleteChapter = async (chapterId: string) => {
-    if (!token) return
-    
     setIsDeletingChapter(true)
     try {
       const response = await fetch(`/api/chapters/${chapterId}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       })
       
       const result = await response.json()
@@ -172,7 +167,7 @@ export default function UploadContentPage() {
   }
 
   const handleUpdateChapter = async () => {
-    if (!token || !selectedChapter) return
+    if (!selectedChapter) return
     
     setIsUpdatingChapter(true)
     setError("")
@@ -182,7 +177,6 @@ export default function UploadContentPage() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           title: editChapterData.title,
@@ -286,12 +280,10 @@ export default function UploadContentPage() {
       const genresInput = (document.getElementById("genres") as HTMLInputElement)?.value || ""
       const genres = genresInput.split(",").map((g) => g.trim()).filter((g) => g)
 
-      const token = localStorage.getItem("amrverse_token")
       const response = await fetch("/api/manhwas", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           title: formData.title,

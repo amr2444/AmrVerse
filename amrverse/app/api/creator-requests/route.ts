@@ -1,7 +1,8 @@
 // API pour gérer les demandes de statut créateur
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { getUserIdFromToken } from "@/lib/auth"
+import { generateAdminActionToken } from "@/lib/auth"
+import { getAuthenticatedUserId } from "@/lib/auth-request"
 import { sendCreatorRequestToAdmin } from "@/lib/email"
 import type { ApiResponse } from "@/lib/types"
 
@@ -21,18 +22,10 @@ interface CreatorRequest {
 // GET - Récupérer la demande de l'utilisateur connecté
 export async function GET(request: NextRequest): Promise<NextResponse<ApiResponse<CreatorRequest | null>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized" },
-        { status: 401 },
-      )
-    }
-
-    const userId = getUserIdFromToken(token)
+    const userId = getAuthenticatedUserId(request)
     if (!userId) {
       return NextResponse.json(
-        { success: false, error: "Invalid token" },
+        { success: false, error: "Unauthorized" },
         { status: 401 },
       )
     }
@@ -79,23 +72,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
 // POST - Soumettre une nouvelle demande
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<CreatorRequest>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    console.log('[CreatorRequest POST] Token received:', token ? 'YES' : 'NO')
-    
-    if (!token) {
+    const userId = getAuthenticatedUserId(request)
+    if (!userId) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
-        { status: 401 },
-      )
-    }
-
-    const userId = getUserIdFromToken(token)
-    console.log('[CreatorRequest POST] UserId extracted:', userId)
-    
-    if (!userId) {
-      console.error('[CreatorRequest POST] Invalid or expired token')
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token. Please log out and log in again." },
         { status: 401 },
       )
     }
@@ -157,10 +137,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     )
 
     // Envoyer l'email de notification à l'admin
-    console.log('[CreatorRequest] Preparing to send admin notification email...');
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000'
-    const approveUrl = `${baseUrl}/api/admin/creator-requests/${createdRequest.id}?action=approve&token=${process.env.ADMIN_SECRET_TOKEN || 'dev-secret-token'}`
-    const rejectUrl = `${baseUrl}/api/admin/creator-requests/${createdRequest.id}?action=reject&token=${process.env.ADMIN_SECRET_TOKEN || 'dev-secret-token'}`
+    const approveUrl = `${baseUrl}/api/admin/creator-requests/${createdRequest.id}?action=approve&token=${generateAdminActionToken({ requestId: createdRequest.id, action: "approve" })}`
+    const rejectUrl = `${baseUrl}/api/admin/creator-requests/${createdRequest.id}?action=reject&token=${generateAdminActionToken({ requestId: createdRequest.id, action: "reject" })}`
 
     const emailResult = await sendCreatorRequestToAdmin({
       userName: fullName,
@@ -177,8 +156,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       return { success: false, error: String(error) }
     })
     
-    console.log('[CreatorRequest] Email send result:', emailResult)
-
     return NextResponse.json(
       {
         success: true,

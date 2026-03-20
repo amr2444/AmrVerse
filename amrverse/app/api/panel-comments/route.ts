@@ -1,28 +1,19 @@
 // Save and retrieve panel comments (comments on specific manga panels) - SECURED
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { getUserIdFromToken } from "@/lib/auth"
+import { getAuthenticatedUserId } from "@/lib/auth-request"
 import { sanitizeInput } from "@/lib/validations"
 import type { ApiResponse, PanelComment } from "@/lib/types"
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<PanelComment>>> {
   try {
-    const token = request.headers.get("authorization")?.split(" ")[1]
-    if (!token) {
+    const userId = getAuthenticatedUserId(request)
+    if (!userId) {
       return NextResponse.json(
         {
           success: false,
           error: "Unauthorized",
         },
-        { status: 401 },
-      )
-    }
-
-    // SECURITY FIX: Extract userId from JWT token instead of request body
-    const userId = getUserIdFromToken(token)
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: "Invalid or expired token" },
         { status: 401 },
       )
     }

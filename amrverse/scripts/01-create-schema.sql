@@ -15,6 +15,7 @@ CREATE TABLE users (
   avatar_url VARCHAR(500),
   bio TEXT,
   is_creator BOOLEAN DEFAULT FALSE,
+  is_admin BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -156,6 +157,7 @@ CREATE INDEX idx_messages_user ON chat_messages(user_id);
 CREATE INDEX idx_progress_user ON reading_progress(user_id);
 CREATE INDEX idx_favorites_user ON user_favorites(user_id);
 CREATE INDEX idx_friends_users ON friendships(user_id_1, user_id_2);
+CREATE INDEX idx_users_is_admin ON users(is_admin) WHERE is_admin = TRUE;
 
 -- Add updated_at trigger
 CREATE OR REPLACE FUNCTION update_updated_at_column()

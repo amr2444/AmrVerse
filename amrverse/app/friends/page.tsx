@@ -19,26 +19,24 @@ interface Friend {
 
 export default function FriendsPage() {
   const router = useRouter()
-  const { user, token } = useAuth()
+  const { user } = useAuth()
   const [friends, setFriends] = useState<Friend[]>([])
   const [pending, setPending] = useState<Friend[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!user || !token) {
+    if (!user) {
       router.push("/auth")
       return
     }
 
     loadFriends()
     loadPending()
-  }, [user, token])
+  }, [user])
 
   const loadFriends = async () => {
     try {
-      const res = await fetch('/api/friends?status=accepted', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      const res = await fetch('/api/friends?status=accepted')
       const data = await res.json()
       setFriends(data.data || [])
     } catch (err) {
@@ -48,9 +46,7 @@ export default function FriendsPage() {
 
   const loadPending = async () => {
     try {
-      const res = await fetch('/api/friends?status=pending', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      const res = await fetch('/api/friends?status=pending')
       const data = await res.json()
       setPending(data.data || [])
     } catch (err) {
@@ -65,7 +61,6 @@ export default function FriendsPage() {
       const res = await fetch('/api/friends', {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ friendId, action })
