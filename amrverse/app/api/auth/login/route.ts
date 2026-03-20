@@ -4,7 +4,7 @@ export const runtime = "nodejs"
 
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
-import { verifyPassword, generateTokenPair } from "@/lib/auth"
+import { generateTokenPair, hashPassword, verifyPasswordWithMigration } from "@/lib/auth"
 import { setAuthCookies } from "@/lib/auth-cookies"
 import { applyRateLimit, getClientIP, createRateLimitHeaders, resetRateLimit } from "@/lib/rate-limiter"
 import type { LoginPayload } from "@/lib/validations"
@@ -60,8 +60,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
-    // Verify password
-    if (!verifyPassword(payload.password, user.password_hash)) {
+    // Verify password and transparently upgrade legacy hashes on successful login
+    const passwordVerification = verifyPasswordWithMigration(payload.password, user.password_hash)
+
+    if (!passwordVerification.isValid) {
       return NextResponse.json(
         {
           success: false,
@@ -69,6 +71,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
         },
         { status: 401 },
       )
+    }
+
+    if (passwordVerification.needsRehash) {
+      await sql(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hashPassword(payload.password), user.id])
     }
 
     // Generate JWT token pair (access + refresh)

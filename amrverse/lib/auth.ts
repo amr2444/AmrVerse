@@ -22,6 +22,7 @@ const REFRESH_TOKEN_EXPIRY = "7d" // 7 days
 
 // PBKDF2 configuration - 100,000 iterations as recommended by OWASP
 const PBKDF2_ITERATIONS = 100000
+const LEGACY_PBKDF2_ITERATIONS = 1000
 const PBKDF2_KEYLEN = 64
 const PBKDF2_DIGEST = "sha512"
 
@@ -53,6 +54,11 @@ export interface TokenPair {
   refreshToken: string
 }
 
+export interface PasswordVerificationResult {
+  isValid: boolean
+  needsRehash: boolean
+}
+
 export interface AdminActionPayload {
   requestId: string
   action: "approve" | "reject"
@@ -82,41 +88,47 @@ export interface AuthenticatedUser {
  */
 export function hashPassword(password: string): string {
   const salt = crypto.randomBytes(32).toString("hex")
-  const hash = crypto.pbkdf2Sync(
-    password, 
-    salt, 
-    PBKDF2_ITERATIONS, 
-    PBKDF2_KEYLEN, 
-    PBKDF2_DIGEST
-  ).toString("hex")
+  const hash = createPasswordHash(password, salt, PBKDF2_ITERATIONS)
   return `${salt}:${hash}`
+}
+
+function createPasswordHash(password: string, salt: string, iterations: number): string {
+  return crypto.pbkdf2Sync(password, salt, iterations, PBKDF2_KEYLEN, PBKDF2_DIGEST).toString("hex")
+}
+
+function compareHash(password: string, salt: string, originalHash: string, iterations: number): boolean {
+  const hashToVerify = createPasswordHash(password, salt, iterations)
+
+  return crypto.timingSafeEqual(Buffer.from(originalHash, "hex"), Buffer.from(hashToVerify, "hex"))
+}
+
+export function verifyPasswordWithMigration(password: string, storedHash: string): PasswordVerificationResult {
+  try {
+    const [salt, originalHash] = storedHash.split(":")
+    if (!salt || !originalHash) {
+      return { isValid: false, needsRehash: false }
+    }
+
+    if (compareHash(password, salt, originalHash, PBKDF2_ITERATIONS)) {
+      return { isValid: true, needsRehash: false }
+    }
+
+    if (compareHash(password, salt, originalHash, LEGACY_PBKDF2_ITERATIONS)) {
+      return { isValid: true, needsRehash: true }
+    }
+
+    return { isValid: false, needsRehash: false }
+  } catch (error) {
+    console.error("Password verification error:", error)
+    return { isValid: false, needsRehash: false }
+  }
 }
 
 /**
  * Verify password against stored hash using constant-time comparison
  */
 export function verifyPassword(password: string, storedHash: string): boolean {
-  try {
-    const [salt, originalHash] = storedHash.split(":")
-    if (!salt || !originalHash) return false
-    
-    const hashToVerify = crypto.pbkdf2Sync(
-      password, 
-      salt, 
-      PBKDF2_ITERATIONS, 
-      PBKDF2_KEYLEN, 
-      PBKDF2_DIGEST
-    ).toString("hex")
-    
-    // Constant-time comparison to prevent timing attacks
-    return crypto.timingSafeEqual(
-      Buffer.from(originalHash, "hex"),
-      Buffer.from(hashToVerify, "hex")
-    )
-  } catch (error) {
-    console.error("Password verification error:", error)
-    return false
-  }
+  return verifyPasswordWithMigration(password, storedHash).isValid
 }
 
 // ============================================================================
