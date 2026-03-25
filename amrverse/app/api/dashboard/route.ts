@@ -2,6 +2,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
 import { getAuthenticatedUser } from "@/lib/auth-request"
+import { mapManhwaRow, mapReadingRoomRow } from "@/lib/server/mappers"
 import type { ApiResponse, Manhwa, ReadingRoom } from "@/lib/types"
 
 interface ReadingHistoryItem {
@@ -125,35 +126,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<ApiRespons
           completed: rh.completed,
           lastReadAt: rh.last_read_at,
         })),
-        favorites: favorites.map((m: any) => ({
-          id: m.id,
-          title: m.title,
-          slug: m.slug,
-          description: m.description,
-          coverUrl: m.cover_url,
-          author: m.author,
-          status: m.status,
-          genres: m.genre || [],
-          rating: m.rating,
-          totalChapters: m.total_chapters,
-          createdBy: m.created_by,
-          createdAt: m.created_at,
-          updatedAt: m.updated_at,
-        })),
+        favorites: favorites.map(mapManhwaRow),
         activeRooms: activeRooms.map((r: any) => ({
-          id: r.id,
-          code: r.code,
-          manhwaId: r.manhwa_id,
-          chapterId: r.chapter_id,
-          hostId: r.host_id,
-          roomName: r.room_name,
-          currentScrollPosition: r.current_scroll_position,
-          currentPageIndex: r.current_page_index || 0,
-          isActive: r.is_active,
-          maxParticipants: r.max_participants,
-          syncEnabled: r.sync_enabled ?? true,
-          createdAt: r.created_at,
-          expiresAt: r.expires_at,
+          ...mapReadingRoomRow(r),
           manhwaTitle: r.manhwa_title,
           manhwaCoverUrl: r.manhwa_cover_url,
           participantCount: parseInt(r.participant_count) || 0,

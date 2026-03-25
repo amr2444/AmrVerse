@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
@@ -11,41 +11,44 @@ import { ImageUploader } from "@/components/image-uploader"
 import { BookOpen, Upload, LogOut, Search, Plus, ChevronDown, Check, Trash2, Edit3, Eye, X, AlertTriangle, Layers } from "lucide-react"
 import { Logo } from "@/components/logo"
 import type { Manhwa, Chapter } from "@/lib/types"
+import { useCreatorStudio } from "@/hooks/use-creator-studio"
 
 export default function UploadContentPage() {
   const router = useRouter()
   const { user, isLoading, logout, isAuthenticated } = useAuth()
-  const [mode, setMode] = useState<"select" | "create">("select") // Mode: select existing or create new
-  const [existingManhwas, setExistingManhwas] = useState<Manhwa[]>([])
-  const [filteredManhwas, setFilteredManhwas] = useState<Manhwa[]>([])
-  const [selectedManhwa, setSelectedManhwa] = useState<Manhwa | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const [isLoadingManhwas, setIsLoadingManhwas] = useState(true)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-  
-  // Chapter management state
-  const [chapters, setChapters] = useState<Chapter[]>([])
-  const [isLoadingChapters, setIsLoadingChapters] = useState(false)
-  const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null)
-  const [chapterAction, setChapterAction] = useState<"view" | "edit" | "delete" | null>(null)
-  const [isDeletingChapter, setIsDeletingChapter] = useState(false)
-  const [isUpdatingChapter, setIsUpdatingChapter] = useState(false)
-  const [showChapterManager, setShowChapterManager] = useState(false)
-  const [editChapterData, setEditChapterData] = useState({
-    title: "",
-    description: "",
-  })
-  
-  const [formData, setFormData] = useState({
-    title: "",
-    author: "",
-    description: "",
-    coverUrl: "",
-    genres: [] as string[],
-  })
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState("")
+  const {
+    dropdownRef,
+    mode,
+    setMode,
+    filteredManhwas,
+    selectedManhwa,
+    setSelectedManhwa,
+    searchQuery,
+    setSearchQuery,
+    isDropdownOpen,
+    setIsDropdownOpen,
+    isLoadingManhwas,
+    chapters,
+    isLoadingChapters,
+    selectedChapter,
+    setSelectedChapter,
+    chapterAction,
+    setChapterAction,
+    isDeletingChapter,
+    isUpdatingChapter,
+    showChapterManager,
+    setShowChapterManager,
+    editChapterData,
+    setEditChapterData,
+    formData,
+    isSubmitting,
+    error,
+    setError,
+    handleInputChange,
+    handleDeleteChapter,
+    handleUpdateChapter,
+    handleCreateManhwa,
+  } = useCreatorStudio()
 
   // Redirect to auth if not authenticated
   useEffect(() => {
@@ -54,109 +57,6 @@ export default function UploadContentPage() {
     }
   }, [isLoading, isAuthenticated, router])
 
-  // Fetch existing manhwas
-  useEffect(() => {
-    const fetchManhwas = async () => {
-      try {
-        const response = await fetch("/api/manhwas?page=1&pageSize=100")
-        const result = await response.json()
-        if (result.success) {
-          setExistingManhwas(result.data.data)
-          setFilteredManhwas(result.data.data)
-        }
-      } catch (error) {
-        console.error("[v0] Failed to fetch manhwas:", error)
-      } finally {
-        setIsLoadingManhwas(false)
-      }
-    }
-    fetchManhwas()
-  }, [])
-
-  // Filter manhwas based on search query
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredManhwas(existingManhwas)
-    } else {
-      const query = searchQuery.toLowerCase()
-      setFilteredManhwas(
-        existingManhwas.filter(
-          (m) =>
-            m.title.toLowerCase().includes(query) ||
-            (m.author && m.author.toLowerCase().includes(query))
-        )
-      )
-    }
-  }, [searchQuery, existingManhwas])
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
-
-  // Fetch chapters when a manhwa is selected
-  useEffect(() => {
-    if (selectedManhwa) {
-      fetchChapters(selectedManhwa.id)
-    } else {
-      setChapters([])
-      setShowChapterManager(false)
-    }
-  }, [selectedManhwa])
-
-  const fetchChapters = async (manhwaId: string) => {
-    setIsLoadingChapters(true)
-    try {
-      const response = await fetch(`/api/manhwas/${manhwaId}/chapters`)
-      const result = await response.json()
-      if (result.success) {
-        setChapters(result.data)
-      }
-    } catch (error) {
-      console.error("[v0] Failed to fetch chapters:", error)
-    } finally {
-      setIsLoadingChapters(false)
-    }
-  }
-
-  const handleDeleteChapter = async (chapterId: string) => {
-    setIsDeletingChapter(true)
-    try {
-      const response = await fetch(`/api/chapters/${chapterId}`, {
-        method: "DELETE",
-      })
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        // Remove from local state
-        setChapters((prev) => prev.filter((c) => c.id !== chapterId))
-        setSelectedChapter(null)
-        setChapterAction(null)
-        // Update manhwa chapter count locally
-        if (selectedManhwa) {
-          setSelectedManhwa({
-            ...selectedManhwa,
-            totalChapters: selectedManhwa.totalChapters - 1,
-          })
-        }
-      } else {
-        setError(result.error || "Failed to delete chapter")
-      }
-    } catch (error) {
-      console.error("[v0] Failed to delete chapter:", error)
-      setError("Failed to delete chapter")
-    } finally {
-      setIsDeletingChapter(false)
-    }
-  }
-
   const handleEditChapter = (chapter: Chapter) => {
     setSelectedChapter(chapter)
     setEditChapterData({
@@ -164,46 +64,6 @@ export default function UploadContentPage() {
       description: "",  // Chapter description if available
     })
     setChapterAction("edit")
-  }
-
-  const handleUpdateChapter = async () => {
-    if (!selectedChapter) return
-    
-    setIsUpdatingChapter(true)
-    setError("")
-    
-    try {
-      const response = await fetch(`/api/chapters/${selectedChapter.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: editChapterData.title,
-        }),
-      })
-      
-      const result = await response.json()
-      
-      if (result.success) {
-        // Update local state
-        setChapters((prev) => prev.map((c) => 
-          c.id === selectedChapter.id 
-            ? { ...c, title: editChapterData.title }
-            : c
-        ))
-        setSelectedChapter(null)
-        setChapterAction(null)
-        setEditChapterData({ title: "", description: "" })
-      } else {
-        setError(result.error || "Failed to update chapter")
-      }
-    } catch (error) {
-      console.error("[v0] Failed to update chapter:", error)
-      setError("Failed to update chapter")
-    } finally {
-      setIsUpdatingChapter(false)
-    }
   }
 
   // Show loading state while checking auth
@@ -238,13 +98,8 @@ export default function UploadContentPage() {
     )
   }
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
-  }
-
   const handleCoverUpload = (url: string) => {
-    setFormData((prev) => ({ ...prev, coverUrl: url }))
+    handleInputChange("coverUrl", url)
   }
 
   const handleLogout = () => {
@@ -266,48 +121,9 @@ export default function UploadContentPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    setError("")
-
-    try {
-      // Create slug from title
-      const slug = formData.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "")
-
-      // Parse genres from comma-separated string
-      const genresInput = (document.getElementById("genres") as HTMLInputElement)?.value || ""
-      const genres = genresInput.split(",").map((g) => g.trim()).filter((g) => g)
-
-      const response = await fetch("/api/manhwas", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          title: formData.title,
-          slug,
-          description: formData.description,
-          coverUrl: formData.coverUrl,
-          author: formData.author,
-          genre: genres,
-          status: "ongoing",
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to create manhwa")
-      }
-
-      // Success! Redirect to upload pages
-      router.push(`/admin/upload-pages?manhwaId=${data.data.id}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred")
-    } finally {
-      setIsSubmitting(false)
+    const manhwaId = await handleCreateManhwa()
+    if (manhwaId) {
+      router.push(`/admin/upload-pages?manhwaId=${manhwaId}`)
     }
   }
 
@@ -839,7 +655,7 @@ export default function UploadContentPage() {
                     type="text"
                     placeholder="Entrez le titre de votre manhwa"
                     value={formData.title}
-                    onChange={handleInputChange}
+                    onChange={(event) => handleInputChange("title", event.target.value)}
                     className="bg-card/50 border-fuchsia-500/20 focus:border-fuchsia-500/50"
                   />
                 </div>
@@ -854,7 +670,7 @@ export default function UploadContentPage() {
                     type="text"
                     placeholder="Votre nom ou pseudonyme"
                     value={formData.author}
-                    onChange={handleInputChange}
+                    onChange={(event) => handleInputChange("author", event.target.value)}
                     className="bg-card/50 border-fuchsia-500/20 focus:border-fuchsia-500/50"
                   />
                 </div>
@@ -868,7 +684,7 @@ export default function UploadContentPage() {
                     name="description"
                     placeholder="Décrivez votre manhwa aux lecteurs..."
                     value={formData.description}
-                    onChange={handleInputChange}
+                    onChange={(event) => handleInputChange("description", event.target.value)}
                     rows={4}
                     className="w-full px-4 py-2 bg-card/50 border border-fuchsia-500/20 rounded-lg text-foreground placeholder-foreground/50 focus:border-fuchsia-500/50 focus:outline-none"
                   />
@@ -883,6 +699,8 @@ export default function UploadContentPage() {
                     name="genres"
                     type="text"
                     placeholder="action, fantasy, aventure"
+                    value={formData.genres.join(", ")}
+                    onChange={(event) => handleInputChange("genres", event.target.value.split(",").map((genre) => genre.trim()).filter(Boolean))}
                     className="bg-card/50 border-fuchsia-500/20 focus:border-fuchsia-500/50"
                   />
                 </div>

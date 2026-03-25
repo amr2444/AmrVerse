@@ -2,6 +2,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
 import { getAuthenticatedUserId } from "@/lib/auth-request"
+import { applyRateLimit, createRateLimitHeaders, getRateLimitIdentifier } from "@/lib/rate-limiter"
+import { captureException, logEvent, withRateLimitHeaders } from "@/lib/observability"
 import { sanitizeInput } from "@/lib/validations"
 import type { ApiResponse, ChatMessage } from "@/lib/types"
 
@@ -14,6 +16,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
         { success: false, error: "Unauthorized" },
         { status: 401 },
       )
+    }
+
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(
+      request,
+      "chat",
+      getRateLimitIdentifier(request, userId),
+    )
+    if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "chat.message_rate_limited", request, userId })
+      return rateLimitResponse as NextResponse<ApiResponse<ChatMessage>>
     }
 
     const payload = await request.json()
@@ -43,7 +55,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       [payload.roomId, userId, sanitizedMessage],
     )
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         id: message.id,
@@ -53,8 +65,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
         createdAt: message.created_at,
       },
     })
+    logEvent({ event: "chat.message_saved", request, userId, metadata: { roomId: payload.roomId, messageLength: sanitizedMessage.length } })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[v0] Save message error:", error)
+    await captureException({ event: "chat.message_save_failed", request, error })
     return NextResponse.json(
       {
         success: false,

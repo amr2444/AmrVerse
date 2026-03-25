@@ -5,10 +5,18 @@ export const runtime = "nodejs"
 import { type NextRequest, NextResponse } from "next/server"
 import { refreshAccessToken, verifyRefreshToken } from "@/lib/auth"
 import { getRefreshTokenFromRequest, setAccessTokenCookie } from "@/lib/auth-cookies"
+import { applyRateLimit, createRateLimitHeaders, getClientIP } from "@/lib/rate-limiter"
+import { captureException, logEvent, withRateLimitHeaders } from "@/lib/observability"
 import type { ApiResponse } from "@/lib/types"
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<{ accessToken: string }>>> {
   try {
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(request, "auth", getClientIP(request))
+    if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "auth.refresh.rate_limited", request })
+      return rateLimitResponse as NextResponse<ApiResponse<{ accessToken: string }>>
+    }
+
     let refreshToken = getRefreshTokenFromRequest(request)
 
     if (!refreshToken) {
@@ -62,9 +70,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     )
 
     setAccessTokenCookie(response, newAccessToken)
-    return response
+    logEvent({ event: "auth.refresh.succeeded", request, metadata: { hasCookie: !!refreshToken } })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[v0] Token refresh error:", error)
+    await captureException({ event: "auth.refresh.failed", request, error })
     return NextResponse.json(
       {
         success: false,

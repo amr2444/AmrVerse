@@ -5,6 +5,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import type { User } from "./types"
+import { fetchUserProfile, loadAuthSession, loginWithPassword, logoutSession, refreshAuthToken, signupWithPassword } from "@/lib/services/auth-client"
 
 interface AuthContextType {
   user: User | null
@@ -32,31 +33,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setToken(null)
 
-    void fetch("/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    }).catch((error) => {
+    void logoutSession().catch((error) => {
       console.error("Logout error:", error)
     })
   }, [])
 
   const loadSession = useCallback(async () => {
     try {
-      const response = await fetch("/api/auth/session", {
-        credentials: "include",
-      })
-
-      if (!response.ok) {
-        setUser(null)
-        setToken(null)
-        return
-      }
-
-      const data = await response.json()
-      if (data.success && data.data?.user) {
-        setUser(data.data.user)
-        setToken(data.data.accessToken || null)
-      }
+      const response = await loadAuthSession()
+      setUser(response.data.user)
+      setToken(response.data.accessToken || null)
     } catch (error) {
       console.error("Session load error:", error)
       setUser(null)
@@ -68,25 +54,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch("/api/auth/refresh", {
-        method: "POST",
-        credentials: "include",
-      })
-
-      if (!response.ok) {
-        logout()
-        return false
-      }
-
-      const data = await response.json()
-      if (data.success && data.data.accessToken) {
-        setToken(data.data.accessToken)
-        return true
-      }
-
-      return false
+      const response = await refreshAuthToken()
+      setToken(response.data.accessToken)
+      return true
     } catch (error) {
       console.error("Token refresh error:", error)
+      logout()
       return false
     }
   }, [logout])
@@ -110,26 +83,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = async (email: string, username: string, password: string, displayName?: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, username, password, displayName }),
-      })
-
-      let data
-      try {
-        data = await response.json()
-      } catch (parseError) {
-        throw new Error("Failed to parse server response")
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || "Signup failed")
-      }
-
-      setToken(data.data.accessToken)
-      setUser(data.data.user)
+      const response = await signupWithPassword(email, username, password, displayName)
+      setToken(response.data.accessToken)
+      setUser(response.data.user)
     } catch (error) {
       setIsLoading(false)
       throw error
@@ -141,26 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      })
-
-      let data
-      try {
-        data = await response.json()
-      } catch (parseError) {
-        throw new Error("Failed to parse server response")
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || "Login failed")
-      }
-
-      setToken(data.data.accessToken)
-      setUser(data.data.user)
+      const response = await loginWithPassword(email, password)
+      setToken(response.data.accessToken)
+      setUser(response.data.user)
     } catch (error) {
       setIsLoading(false)
       throw error
@@ -174,14 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return
 
     try {
-      const response = await fetch(`/api/users/${user.id}/profile`, { credentials: "include" })
-
-      if (!response.ok) return
-
-      const data = await response.json()
-      if (data.success && data.data) {
-        setUser(data.data)
-      }
+      const response = await fetchUserProfile(user.id)
+      setUser(response.data)
     } catch (error) {
       console.error("Failed to refresh user:", error)
     }

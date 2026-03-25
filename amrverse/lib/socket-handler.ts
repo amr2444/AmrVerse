@@ -141,7 +141,7 @@ export function initializeSocketHandlers(io: Server) {
       roomState.participants.set(socket.id, { userId, username, scrollPosition: 0, isTyping: false })
 
       // Notify others that user joined
-      io.to(roomCode).emit("user-joined", {
+      socket.to(roomCode).emit("user-joined", {
         username,
         participantCount: roomState.participants.size,
         timestamp: new Date(),
@@ -209,7 +209,7 @@ export function initializeSocketHandlers(io: Server) {
       const sanitizedMessage = sanitizeInput(message)
 
       // SECURITY FIX: Use authenticated user data
-      io.to(roomCode).emit("message-received", {
+      socket.to(roomCode).emit("message-received", {
         roomCode,
         message: sanitizedMessage,
         userId: socket.user.userId,

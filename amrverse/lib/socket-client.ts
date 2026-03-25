@@ -10,15 +10,8 @@ let socket: Socket | null = null
  * The token is sent during the handshake for server-side verification
  */
 export function initializeSocket(): Socket {
-  // If socket exists and is connected, return it
-  if (socket?.connected) {
-    return socket
-  }
-
-  // Disconnect existing socket if it exists but isn't connected
   if (socket) {
-    socket.disconnect()
-    socket = null
+    return socket
   }
 
   socket = io(undefined, {

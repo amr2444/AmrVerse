@@ -8,16 +8,20 @@ import { VerticalScrollReader } from "@/components/vertical-scroll-reader"
 import { LogOut, Users, Send, MessageCircle, Copy, Check, BookOpen, Radio, Crown, Link2, Unlink, Trash2 } from "lucide-react"
 import { Logo } from "@/components/logo"
 import type { ChapterPage, PanelComment, ReadingRoom } from "@/lib/types"
-
-interface RoomParticipant {
-  id: string
-  roomId: string
-  userId: string
-  // injected by API for UI convenience
-  username?: string
-  joinedAt?: string
-  lastSeen?: string
-}
+import { useRoomRealtime } from "@/hooks/use-room-realtime"
+import {
+  createPanelComment,
+  deleteRoom,
+  getChapterPages,
+  getPanelComments,
+  getRoomByCode,
+  getRoomMessages,
+  getRoomParticipants,
+  joinRoom,
+  sendRoomMessage,
+  syncRoomPosition,
+  type RoomParticipantView,
+} from "@/lib/services/room-client"
 
 interface Message {
   id: string
@@ -32,12 +36,11 @@ export default function ReadingRoomPage() {
   const params = useParams()
   const { user, logout } = useAuth()
 
-  const [participants, setParticipants] = useState<RoomParticipant[]>([])
+  const [participants, setParticipants] = useState<RoomParticipantView[]>([])
   const [messages, setMessages] = useState<Message[]>([])
   const [messageInput, setMessageInput] = useState("")
   const [room, setRoom] = useState<ReadingRoom | null>(null)
   const [isRoomLoading, setIsRoomLoading] = useState(true)
-  const [isChatPolling, setIsChatPolling] = useState(false)
   const [pages, setPages] = useState<ChapterPage[]>([])
   const [currentPageIndex, setCurrentPageIndex] = useState(0)
   const [panelComments, setPanelComments] = useState<PanelComment[]>([])
@@ -87,13 +90,12 @@ export default function ReadingRoomPage() {
         setIsRoomLoading(true)
 
         // 1) Resolve room by code (room.id is the real UUID used by chat/participants)
-        const roomRes = await fetch(`/api/reading-rooms?code=${roomCode}`)
-        const roomJson = await roomRes.json()
-        if (!roomRes.ok || !roomJson.success || !roomJson.data?.length) {
-          throw new Error(roomJson.error || "Room not found")
+        const roomResponse = await getRoomByCode(roomCode)
+        if (!roomResponse.data?.length) {
+          throw new Error("Room not found")
         }
 
-        const r: ReadingRoom = roomJson.data[0]
+        const r: ReadingRoom = roomResponse.data[0]
         if (cancelled) return
         setRoom(r)
         const userIsHost = r.hostId === user.id
@@ -102,11 +104,10 @@ export default function ReadingRoomPage() {
         setSyncEnabled(r.syncEnabled !== false)
 
         // 2) Fetch chapter pages
-        const pagesRes = await fetch(`/api/chapters/${r.chapterId}/pages`)
-        const pagesJson = await pagesRes.json()
-        if (pagesJson.success) {
-          console.log("[v0] Pages loaded:", pagesJson.data.length, "pages")
-          setPages(pagesJson.data)
+        const pagesResponse = await getChapterPages(r.chapterId)
+        if (pagesResponse.data) {
+          console.log("[v0] Pages loaded:", pagesResponse.data.length, "pages")
+          setPages(pagesResponse.data)
           // Don't reset to 0 if room already has a currentPageIndex from host
           if (r.currentPageIndex && r.currentPageIndex > 0) {
             setCurrentPageIndex(r.currentPageIndex)
@@ -114,11 +115,7 @@ export default function ReadingRoomPage() {
         }
 
         // 3) Join room (upsert)
-        await fetch("/api/room-participants", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomId: r.id, userId: user.id }),
-        })
+        await joinRoom(r.id)
 
         // 4) Initial loads
         await Promise.all([loadParticipants(r.id), loadMessages(r.id)])
@@ -136,35 +133,6 @@ export default function ReadingRoomPage() {
     }
   }, [roomCode, user])
 
-  // Poll chat + participants (optimized polling intervals)
-  useEffect(() => {
-    if (!room?.id || !user) return
-    if (isChatPolling) return
-    setIsChatPolling(true)
-
-    // Faster chat polling for better responsiveness (500ms)
-    const chatInterval = setInterval(() => {
-      loadMessages(room.id)
-    }, 500)
-
-    // Participants update every 4 seconds
-    const participantsInterval = setInterval(() => {
-      loadParticipants(room.id)
-      // keep last_seen fresh
-      fetch("/api/room-participants", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId: room.id, userId: user.id }),
-      }).catch(() => {})
-    }, 4000)
-
-    return () => {
-      clearInterval(chatInterval)
-      clearInterval(participantsInterval)
-      setIsChatPolling(false)
-    }
-  }, [room?.id, user?.id])
-
   // Load panel comments when the active page changes
   useEffect(() => {
     if (!room?.id || pages.length === 0) return
@@ -176,11 +144,10 @@ export default function ReadingRoomPage() {
 
   const loadMessages = useCallback(async (roomId: string) => {
     try {
-      const response = await fetch(`/api/chat-messages?roomId=${roomId}`)
-      const result = await response.json()
-      if (result.success) {
+      const result = await getRoomMessages(roomId)
+      if (result.data) {
         setMessages(
-          result.data.map((m: any) => ({
+          result.data.map((m) => ({
             id: m.id,
             userId: m.userId,
             username: m.username || "User",
@@ -196,11 +163,8 @@ export default function ReadingRoomPage() {
 
   const loadParticipants = useCallback(async (roomId: string) => {
     try {
-      const res = await fetch(`/api/room-participants?roomId=${roomId}`)
-      const json = await res.json()
-      if (json.success) {
-        setParticipants(json.data)
-      }
+      const response = await getRoomParticipants(roomId)
+      setParticipants(response.data || [])
     } catch (error) {
       console.error("[v0] Failed to load participants:", error)
     }
@@ -211,17 +175,83 @@ export default function ReadingRoomPage() {
     if (pages.length === 0) return
 
     try {
-      const response = await fetch(`/api/panel-comments?pageId=${pages[currentPageIndex]?.id}&roomId=${roomId}`)
-      const result = await response.json()
-      if (result.success) {
-        setPanelComments(result.data)
-      }
+      const result = await getPanelComments(pages[currentPageIndex]?.id, roomId)
+      setPanelComments(result.data || [])
     } catch (error) {
       console.error("[v0] Failed to load panel comments:", error)
     }
     },
     [pages, currentPageIndex],
   )
+
+  const handleRealtimeHostScroll = useCallback(
+    (position: number, pageNumber: number) => {
+      if (isHost !== false || isManualScrollRef.current) {
+        return
+      }
+
+      window.scrollTo({
+        top: position,
+        behavior: "smooth",
+      })
+      setLastSyncedPosition(position)
+      setCurrentPageIndex(pageNumber)
+    },
+    [isHost],
+  )
+
+  const handleRealtimeRoomState = useCallback(
+    (state: { currentPageNumber: number; currentScrollPosition: number }) => {
+      if (isHost === false) {
+        handleRealtimeHostScroll(state.currentScrollPosition || 0, state.currentPageNumber || 0)
+      }
+    },
+    [handleRealtimeHostScroll, isHost],
+  )
+
+  const { isConnected: isRealtimeConnected, apiMode, broadcastScroll } = useRoomRealtime({
+    roomCode,
+    enabled: !!user && !!roomCode,
+    onRemoteMessage: (event) => {
+      setMessages((current) => [
+        ...current,
+        {
+          id: `socket-${event.userId}-${new Date(event.timestamp).getTime()}`,
+          userId: event.userId,
+          username: event.username || "User",
+          message: event.message,
+          timestamp: new Date(event.timestamp),
+        },
+      ])
+    },
+    onPresenceChanged: () => {
+      if (room?.id) {
+        void loadParticipants(room.id)
+      }
+    },
+    onRoomState: handleRealtimeRoomState,
+    onHostScroll: handleRealtimeHostScroll,
+  })
+
+  // Fallback polling when realtime sockets are unavailable.
+  useEffect(() => {
+    if (!room?.id || !user) return
+    if (!apiMode) return
+
+    const chatInterval = setInterval(() => {
+      loadMessages(room.id)
+    }, 4000)
+
+    const participantsInterval = setInterval(() => {
+      loadParticipants(room.id)
+      joinRoom(room.id).catch(() => {})
+    }, 6000)
+
+    return () => {
+      clearInterval(chatInterval)
+      clearInterval(participantsInterval)
+    }
+  }, [apiMode, loadMessages, loadParticipants, room?.id, user])
 
   const handleLogout = () => {
     logout()
@@ -248,25 +278,25 @@ export default function ReadingRoomPage() {
     setMessageInput("")
 
     try {
-      const res = await fetch("/api/chat-messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomId: room.id,
-          userId: user.id,
-          message: messageToSend,
-        }),
-      })
+      const response = await sendRoomMessage(room.id, messageToSend)
 
-      if (!res.ok) {
-        // Remove optimistic message on failure
-        setMessages(prev => prev.filter(m => m.id !== tempId))
-        console.error("[v0] Failed to send message:", res.statusText)
-        return
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === tempId
+            ? {
+                id: response.data.id,
+                userId: response.data.userId,
+                username: user.displayName || user.username,
+                message: response.data.message,
+                timestamp: new Date(response.data.createdAt),
+              }
+            : message,
+        ),
+      )
+
+      if (apiMode) {
+        loadMessages(room.id)
       }
-
-      // Refresh messages to get server-assigned IDs and ensure consistency
-      loadMessages(room.id)
     } catch (error) {
       // Remove optimistic message on error
       setMessages(prev => prev.filter(m => m.id !== tempId))
@@ -279,26 +309,18 @@ export default function ReadingRoomPage() {
     if (!room?.id) return
 
     try {
-      const response = await fetch("/api/panel-comments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          chapterPageId: pages[currentPageIndex].id,
-          roomId: room.id,
-          comment: commentText,
-          xPosition: 0,
-          yPosition: 0,
-        }),
+      const result = await createPanelComment({
+        chapterPageId: pages[currentPageIndex].id,
+        roomId: room.id,
+        comment: commentText,
+        xPosition: 0,
+        yPosition: 0,
       })
-
-      if (response.ok) {
-        const result = await response.json()
+      if (result.data) {
         setPanelComments([...panelComments, result.data])
-        setCommentText("")
-        setShowCommentForm(false)
       }
+      setCommentText("")
+      setShowCommentForm(false)
     } catch (error) {
       console.error("[v0] Failed to add comment:", error)
     }
@@ -309,29 +331,22 @@ export default function ReadingRoomPage() {
     if (!user || !room?.id) return
 
     try {
-      const response = await fetch("/api/panel-comments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          chapterPageId: pageId,
-          roomId: room.id,
-          comment: comment,
-          xPosition: xPercent,
-          yPosition: yPercent,
-        }),
+      const result = await createPanelComment({
+        chapterPageId: pageId,
+        roomId: room.id,
+        comment,
+        xPosition: xPercent,
+        yPosition: yPercent,
       })
-
-      if (response.ok) {
-        const result = await response.json()
-        // Add username to the comment for display
-        const newComment = {
-          ...result.data,
-          username: user.displayName || user.username
-        }
-        setPanelComments([...panelComments, newComment])
+      if (!result.data) {
+        return
       }
+
+      const newComment = {
+        ...result.data,
+        username: user.displayName || user.username,
+      }
+      setPanelComments([...panelComments, newComment])
     } catch (error) {
       console.error("[v0] Failed to add contextual comment:", error)
     }
@@ -353,17 +368,9 @@ export default function ReadingRoomPage() {
     if (!confirmed) return
 
     try {
-      const res = await fetch(`/api/reading-rooms?roomId=${room.id}`, {
-        method: "DELETE",
-      })
-
-      const json = await res.json()
-      if (json.success) {
-        alert("Room supprimée avec succès")
-        router.push("/dashboard")
-      } else {
-        alert(json.error || "Erreur lors de la suppression de la room")
-      }
+      await deleteRoom(room.id)
+      alert("Room supprimée avec succès")
+      router.push("/dashboard")
     } catch (error) {
       console.error("[v0] Failed to delete room:", error)
       alert("Erreur lors de la suppression de la room")
@@ -375,21 +382,14 @@ export default function ReadingRoomPage() {
     if (isHost !== true || !room?.id || !user) return
     
     try {
-      await fetch("/api/reading-rooms", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          roomId: room.id,
-          scrollPosition: scrollY,
-          currentPageIndex: pageIndex,
-        }),
-      })
+      await syncRoomPosition(room.id, scrollY, pageIndex)
+      if (isRealtimeConnected) {
+        broadcastScroll(scrollY, pageIndex)
+      }
     } catch (error) {
       console.error("[v0] Failed to sync scroll:", error)
     }
-  }, [isHost, room?.id, user])
+  }, [broadcastScroll, isHost, isRealtimeConnected, room?.id, user])
 
   // Host: Handle scroll events and broadcast position
   useEffect(() => {
@@ -431,17 +431,17 @@ export default function ReadingRoomPage() {
       return
     }
     
-    // Skip if sync is disabled or room not loaded
-    if (!syncEnabled || !room?.id) return
+    // Skip if sync is disabled or room not loaded, or if realtime already handles it.
+    if (!syncEnabled || !room?.id || !apiMode) return
 
     console.log("[v0] Starting sync polling for participant (isHost=false)")
     
     const syncInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/reading-rooms?code=${roomCode}`)
-        const json = await res.json()
-        if (json.success && json.data?.length > 0) {
-          const updatedRoom = json.data[0]
+        const response = await getRoomByCode(roomCode)
+        const rooms = response.data || []
+        if (rooms.length > 0) {
+          const updatedRoom = rooms[0]
           const hostScrollPosition = updatedRoom.currentScrollPosition || 0
           
           // Only sync if position changed significantly (more than 50px)
@@ -461,10 +461,10 @@ export default function ReadingRoomPage() {
       } catch (error) {
         console.error("[v0] Failed to fetch sync position:", error)
       }
-    }, 500) // Poll every 500ms for sync
+    }, 1500) // Fallback only when realtime is unavailable
 
     return () => clearInterval(syncInterval)
-  }, [isHost, syncEnabled, room?.id, roomCode, lastSyncedPosition])
+  }, [apiMode, isHost, syncEnabled, room?.id, roomCode, lastSyncedPosition])
 
   // Allow participants to temporarily break sync when they scroll manually
   useEffect(() => {
@@ -520,7 +520,7 @@ export default function ReadingRoomPage() {
                 <>
                   <Radio className="w-4 h-4 animate-pulse" />
                   <span className="text-xs font-medium hidden sm:inline">
-                    {isHost ? "Broadcasting" : "Synced"}
+                    {isHost ? "Broadcasting" : isRealtimeConnected ? "Live" : "Fallback"}
                   </span>
                 </>
               ) : (

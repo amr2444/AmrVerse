@@ -112,6 +112,33 @@ CREATE TABLE panel_comments (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+CREATE TABLE creator_requests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  full_name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  presentation TEXT NOT NULL,
+  motivation TEXT NOT NULL,
+  portfolio_url VARCHAR(500),
+  status VARCHAR(50) DEFAULT 'pending',
+  admin_notes TEXT,
+  reviewed_by UUID REFERENCES users(id),
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
+CREATE TABLE creator_request_audit_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  request_id UUID NOT NULL REFERENCES creator_requests(id) ON DELETE CASCADE,
+  actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  actor_type VARCHAR(50) NOT NULL,
+  action VARCHAR(50) NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- User favorites table
 CREATE TABLE user_favorites (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -158,6 +185,9 @@ CREATE INDEX idx_progress_user ON reading_progress(user_id);
 CREATE INDEX idx_favorites_user ON user_favorites(user_id);
 CREATE INDEX idx_friends_users ON friendships(user_id_1, user_id_2);
 CREATE INDEX idx_users_is_admin ON users(is_admin) WHERE is_admin = TRUE;
+CREATE INDEX idx_creator_requests_user ON creator_requests(user_id);
+CREATE INDEX idx_creator_requests_status ON creator_requests(status);
+CREATE INDEX idx_creator_request_audit_request ON creator_request_audit_logs(request_id, created_at DESC);
 
 -- Add updated_at trigger
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -173,3 +203,4 @@ CREATE TRIGGER update_manhwas_updated_at BEFORE UPDATE ON manhwas FOR EACH ROW E
 CREATE TRIGGER update_chapters_updated_at BEFORE UPDATE ON chapters FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_panel_comments_updated_at BEFORE UPDATE ON panel_comments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_friendships_updated_at BEFORE UPDATE ON friendships FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_creator_requests_updated_at BEFORE UPDATE ON creator_requests FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

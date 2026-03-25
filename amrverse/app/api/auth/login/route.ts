@@ -7,6 +7,7 @@ import sql from "@/lib/db"
 import { generateTokenPair, hashPassword, verifyPasswordWithMigration } from "@/lib/auth"
 import { setAuthCookies } from "@/lib/auth-cookies"
 import { applyRateLimit, getClientIP, createRateLimitHeaders, resetRateLimit } from "@/lib/rate-limiter"
+import { captureException, logEvent, withRateLimitHeaders } from "@/lib/observability"
 import type { LoginPayload } from "@/lib/validations"
 import type { ApiResponse, User } from "@/lib/types"
 
@@ -17,6 +18,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(request, "auth")
     
     if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "auth.login.rate_limited", request, metadata: { ip: clientIP } })
       return rateLimitResponse as NextResponse<ApiResponse<{ user: User; accessToken: string; refreshToken: string }>>
     }
 
@@ -43,6 +45,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
+    logEvent({ event: "auth.login.attempt", request, metadata: { email: payload.email.toLowerCase() } })
+
     // Find user by email
     const [user] = await sql(
       `SELECT id, email, username, password_hash, display_name, avatar_url, bio, is_creator, is_admin, created_at, updated_at 
@@ -51,6 +55,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     )
 
     if (!user) {
+      logEvent({ level: "warn", event: "auth.login.invalid_credentials", request, metadata: { email: payload.email.toLowerCase() } })
       return NextResponse.json(
         {
           success: false,
@@ -64,6 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const passwordVerification = verifyPasswordWithMigration(payload.password, user.password_hash)
 
     if (!passwordVerification.isValid) {
+      logEvent({ level: "warn", event: "auth.login.invalid_password", request, userId: user.id, metadata: { email: payload.email.toLowerCase() } })
       return NextResponse.json(
         {
           success: false,
@@ -114,9 +120,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     )
 
     setAuthCookies(response, { accessToken, refreshToken })
-    return response
+    logEvent({ event: "auth.login.succeeded", request, userId: user.id })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[v0] Login error:", error)
+    await captureException({ event: "auth.login.failed", request, error })
     return NextResponse.json(
       {
         success: false,

@@ -224,7 +224,7 @@ export default function DashboardPage() {
               {dashboardData.readingHistory.slice(0, 6).map((item) => (
                 <div
                   key={`${item.manhwaId}-${item.chapterId}`}
-                  onClick={() => router.push(`/reader/${item.manhwaSlug}`)}
+                  onClick={() => router.push(`/reader/local/${item.chapterId}`)}
                   className="group cursor-pointer bg-card/40 border border-primary/20 rounded-xl p-4 hover:border-primary/50 hover:bg-card/60 transition-all duration-300"
                 >
                   <div className="flex gap-4">
@@ -385,7 +385,7 @@ export default function DashboardPage() {
               {dashboardData.favorites.slice(0, 5).map((manhwa) => (
                 <div
                   key={manhwa.id}
-                  onClick={() => router.push(`/reader/${manhwa.slug}`)}
+                  onClick={() => router.push(`/manhwa/${manhwa.id}`)}
                   className="group cursor-pointer"
                 >
                   <div className="relative aspect-[3/4] rounded-xl overflow-hidden border-2 border-accent/30 hover:border-accent/60 transition-all duration-300 group-hover:scale-105 transform">

@@ -5,39 +5,29 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Loader2, CheckCircle, XCircle, Clock, ExternalLink, 
-  ThumbsUp, ThumbsDown, Shield 
+  ThumbsUp, ThumbsDown, Shield, History, UserRound 
 } from "lucide-react"
 import { Logo } from "@/components/logo"
-
-interface CreatorRequest {
-  id: string
-  userId: string
-  username: string
-  displayName: string
-  fullName: string
-  email: string
-  presentation: string
-  motivation: string
-  portfolioUrl?: string
-  status: "pending" | "approved" | "rejected"
-  adminNotes?: string
-  reviewedBy?: string
-  reviewedAt?: string
-  createdAt: string
-}
+import { getAdminCreatorRequests, reviewCreatorRequest } from "@/lib/services/creator-client"
+import type { AdminCreatorRequest } from "@/lib/types"
 
 export default function AdminCreatorRequestsPage() {
   const router = useRouter()
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [requests, setRequests] = useState<CreatorRequest[]>([])
+  const [requests, setRequests] = useState<AdminCreatorRequest[]>([])
   const [selectedTab, setSelectedTab] = useState("pending")
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({})
+  const [search, setSearch] = useState("")
+  const [hasPortfolioOnly, setHasPortfolioOnly] = useState(false)
+  const [resubmittedOnly, setResubmittedOnly] = useState(false)
+  const [sortBy, setSortBy] = useState<"recent" | "oldest">("recent")
 
   useEffect(() => {
     if (!user) {
@@ -53,17 +43,27 @@ export default function AdminCreatorRequestsPage() {
     loadRequests("pending")
   }, [user])
 
+  useEffect(() => {
+    if (!user?.isAdmin) return
+
+    const timeoutId = setTimeout(() => {
+      loadRequests(selectedTab)
+    }, 200)
+
+    return () => clearTimeout(timeoutId)
+  }, [hasPortfolioOnly, resubmittedOnly, search, selectedTab, sortBy, user?.isAdmin])
+
   const loadRequests = async (status: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/creator-requests?status=${status}`)
-
-      if (res.ok) {
-        const data = await res.json()
-        setRequests(data.data || [])
-      } else {
-        console.error("Failed to load requests")
-      }
+      const response = await getAdminCreatorRequests({
+        status,
+        search,
+        hasPortfolio: hasPortfolioOnly || undefined,
+        resubmitted: resubmittedOnly || undefined,
+        sortBy,
+      })
+      setRequests(response.data || [])
     } catch (err) {
       console.error("Error loading requests:", err)
     } finally {
@@ -82,26 +82,9 @@ export default function AdminCreatorRequestsPage() {
 
     setProcessingId(requestId)
     try {
-      const res = await fetch(`/api/admin/creator-requests/${requestId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          action,
-          adminNotes: adminNotes[requestId] || "",
-        }),
-      })
-
-      const data = await res.json()
-
-      if (res.ok) {
-        alert(data.data.message)
-        // Recharger la liste
-        loadRequests(selectedTab)
-      } else {
-        alert(data.error || "Erreur lors du traitement")
-      }
+      const response = await reviewCreatorRequest(requestId, action, adminNotes[requestId] || "")
+      alert(response.data?.message || "Action terminée")
+      loadRequests(selectedTab)
     } catch (err) {
       console.error("Error processing request:", err)
       alert("Une erreur est survenue")
@@ -136,7 +119,56 @@ export default function AdminCreatorRequestsPage() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={selectedTab} onValueChange={(v) => { setSelectedTab(v); loadRequests(v) }}>
+        <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+          <Card className="p-4 mb-6">
+            <div className="grid gap-4 lg:grid-cols-[2fr,1fr,1fr,1fr] items-end">
+              <div>
+                <label className="text-sm font-medium text-foreground/70 mb-2 block">Recherche</label>
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Nom, pseudo ou email"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={hasPortfolioOnly} onChange={(event) => setHasPortfolioOnly(event.target.checked)} />
+                Avec portfolio
+              </label>
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input type="checkbox" checked={resubmittedOnly} onChange={(event) => setResubmittedOnly(event.target.checked)} />
+                Resoumises
+              </label>
+              <div>
+                <label className="text-sm font-medium text-foreground/70 mb-2 block">Anciennete</label>
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as "recent" | "oldest")}
+                  className="w-full h-10 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="recent">Plus récentes</option>
+                  <option value="oldest">Plus anciennes</option>
+                </select>
+              </div>
+            </div>
+          </Card>
+
+          <div className="grid gap-4 md:grid-cols-3 mb-6">
+            <Card className="p-4">
+              <p className="text-sm text-foreground/60">Demandes visibles</p>
+              <p className="text-3xl font-bold mt-2">{requests.length}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-sm text-foreground/60">Avec portfolio</p>
+              <p className="text-3xl font-bold mt-2">{requests.filter((request) => !!request.portfolioUrl).length}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-sm text-foreground/60">Déjà relancées</p>
+              <p className="text-3xl font-bold mt-2">
+                {requests.filter((request) => request.auditTrail?.some((entry) => entry.action === "resubmitted")).length}
+              </p>
+            </Card>
+          </div>
+
           <TabsList className="mb-6">
             <TabsTrigger value="pending" className="flex items-center gap-2">
               <Clock className="w-4 h-4" />
@@ -218,7 +250,7 @@ function RequestCard({
   onNotesChange,
   showActions,
 }: {
-  request: CreatorRequest
+  request: AdminCreatorRequest
   onApprove?: () => void
   onReject?: () => void
   processing?: boolean
@@ -233,7 +265,7 @@ function RequestCard({
         <div>
           <h3 className="font-semibold text-lg mb-2">{request.fullName}</h3>
           <div className="space-y-1 text-sm text-foreground/70">
-            <p>@{request.username}</p>
+            <p className="flex items-center gap-2"><UserRound className="w-4 h-4" />@{request.username}</p>
             <p>{request.email}</p>
             <p className="text-xs text-foreground/50">
               Demandé le {new Date(request.createdAt).toLocaleDateString("fr-FR")}
@@ -281,6 +313,31 @@ function RequestCard({
                   Par {request.reviewedBy} le {new Date(request.reviewedAt!).toLocaleDateString("fr-FR")}
                 </p>
               )}
+            </div>
+          )}
+
+          {!!request.auditTrail?.length && (
+            <div>
+              <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                <History className="w-4 h-4" />
+                Historique
+              </h4>
+              <div className="space-y-2">
+                {request.auditTrail.slice(0, 4).map((entry) => (
+                  <div key={entry.id} className="rounded-lg border bg-background/60 p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium capitalize">{entry.action}</span>
+                      <span className="text-xs text-foreground/50">{new Date(entry.createdAt).toLocaleString("fr-FR")}</span>
+                    </div>
+                    {(entry.actorUsername || entry.actorType) && (
+                      <p className="text-xs text-foreground/50 mt-1">
+                        {entry.actorUsername ? `Par ${entry.actorUsername}` : `Source: ${entry.actorType}`}
+                      </p>
+                    )}
+                    {entry.notes && <p className="text-foreground/70 mt-2">{entry.notes}</p>}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

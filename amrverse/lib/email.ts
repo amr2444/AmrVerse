@@ -31,17 +31,29 @@ interface CreatorRequestNotification {
   requestId: string;
   approveUrl: string;
   rejectUrl: string;
+  submissionType?: 'initial' | 'resubmission';
 }
 
 interface CreatorApprovalNotification {
   userName: string;
   userEmail: string;
+  adminNotes?: string;
 }
 
 interface CreatorRejectionNotification {
   userName: string;
   userEmail: string;
   reason?: string;
+}
+
+interface CreatorSubmissionConfirmationNotification {
+  userName: string;
+  userEmail: string;
+  submissionType?: 'initial' | 'resubmission';
+}
+
+function getAppUrl() {
+  return process.env.NEXTAUTH_URL || 'http://localhost:3000';
 }
 
 export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification) {
@@ -63,7 +75,7 @@ export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification
     const { data: emailData, error } = await client.emails.send({
       from: FROM_EMAIL,
       to: ADMIN_EMAIL,
-      subject: `🎨 Nouvelle demande créateur - ${data.userName}`,
+      subject: `${data.submissionType === 'resubmission' ? '🔁 Demande créateur renvoyée' : '🎨 Nouvelle demande créateur'} - ${data.userName}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -87,10 +99,17 @@ export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification
           <body>
             <div class="container">
               <div class="header">
-                <h1>🎨 Nouvelle Demande Créateur</h1>
+                <h1>${data.submissionType === 'resubmission' ? '🔁 Demande Créateur Renvoyée' : '🎨 Nouvelle Demande Créateur'}</h1>
               </div>
               
               <div class="content">
+                <div class="section">
+                  <h3>📌 Type d'envoi</h3>
+                  <div class="info-box">
+                    <p>${data.submissionType === 'resubmission' ? 'Le candidat a corrigé son dossier et a renvoyé sa demande après un refus précédent.' : 'Première soumission de la demande créateur.'}</p>
+                  </div>
+                </div>
+
                 <div class="section">
                   <h3>👤 Informations du candidat</h3>
                   <div class="info-box">
@@ -148,6 +167,80 @@ export async function sendCreatorRequestToAdmin(data: CreatorRequestNotification
     console.error('[Email] ❌ Failed to send admin notification:', error);
     console.error('[Email] Error message:', error?.message);
     console.error('[Email] Error stack:', error?.stack);
+    return { success: false, error };
+  }
+}
+
+export async function sendCreatorSubmissionConfirmationEmail(data: CreatorSubmissionConfirmationNotification) {
+  try {
+    if (!process.env.RESEND_API_KEY) {
+      console.log('[Email] Skipping creator submission confirmation email (no API key configured)');
+      return { success: true };
+    }
+
+    const client = getResendClient();
+    const isResubmission = data.submissionType === 'resubmission';
+    const { data: emailData, error } = await client.emails.send({
+      from: FROM_EMAIL,
+      to: data.userEmail,
+      subject: isResubmission
+        ? '🔁 Votre demande créateur AmrVerse a été renvoyée'
+        : '✅ Votre demande créateur AmrVerse a bien été reçue',
+      html: `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 32px; text-align: center; border-radius: 10px 10px 0 0; }
+              .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
+              .info-box { background: white; padding: 18px; border-left: 4px solid #2563eb; margin: 20px 0; }
+              .button { display: inline-block; padding: 12px 30px; background: #111827; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 20px; }
+              .footer { background: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px; border-radius: 0 0 10px 10px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>${isResubmission ? '🔁 Demande renvoyée' : '✅ Demande reçue'}</h1>
+                <p>${isResubmission ? 'Votre dossier mis à jour est maintenant en cours de réexamen.' : 'Votre candidature créateur est bien enregistrée.'}</p>
+              </div>
+              <div class="content">
+                <p>Bonjour ${data.userName},</p>
+                <p>
+                  ${isResubmission
+                    ? 'Nous avons bien reçu la nouvelle version de votre demande créateur. Elle a été transmise à l’administrateur pour un nouvel examen.'
+                    : 'Nous avons bien reçu votre demande pour devenir créateur sur AmrVerse. Elle a été transmise à l’administrateur pour examen.'}
+                </p>
+                <div class="info-box">
+                  <p><strong>Prochaine étape :</strong> vous recevrez une réponse par email dès qu’une décision sera prise.</p>
+                  <p><strong>Suivi :</strong> vous pouvez aussi consulter l’état de votre demande directement depuis votre espace AmrVerse.</p>
+                </div>
+                <div style="text-align:center;">
+                  <a href="${getAppUrl()}/become-creator" class="button">Voir ma demande</a>
+                </div>
+              </div>
+              <div class="footer">
+                <p>AmrVerse - Plateforme de Lecture de Manhwa</p>
+                <p>Cet email a été envoyé automatiquement. Ne pas répondre.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `,
+    });
+
+    if (error) {
+      console.error('[Email] Error sending creator submission confirmation email:', error);
+      return { success: false, error };
+    }
+
+    console.log('[Email] Creator submission confirmation email sent:', emailData?.id);
+    return { success: true, data: emailData };
+  } catch (error) {
+    console.error('[Email] Failed to send creator submission confirmation email:', error);
     return { success: false, error };
   }
 }
@@ -210,10 +303,17 @@ export async function sendCreatorApprovalEmail(data: CreatorApprovalNotification
                 </div>
 
                 <div style="text-align: center;">
-                  <a href="${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/admin/upload-content" class="button">
+                  <a href="${getAppUrl()}/admin/upload-content" class="button">
                     🚀 Commencer à créer
                   </a>
                 </div>
+
+                ${data.adminNotes ? `
+                  <div style="background: #ecfdf5; padding: 15px; border-radius: 5px; margin-top: 30px;">
+                    <p style="margin: 0 0 8px 0; font-weight: bold;">Message de l'administrateur</p>
+                    <p style="margin: 0; font-size: 14px;">${data.adminNotes.replace(/\n/g, '<br>')}</p>
+                  </div>
+                ` : ''}
 
                 <div style="background: #dbeafe; padding: 15px; border-radius: 5px; margin-top: 30px;">
                   <p style="margin: 0; font-size: 14px;">
@@ -296,7 +396,13 @@ export async function sendCreatorRejectionEmail(data: CreatorRejectionNotificati
                 <p>Nous vous encourageons à continuer à profiter de la plateforme en tant que lecteur et à soumettre une nouvelle demande dans le futur si vous le souhaitez.</p>
 
                 <div style="text-align: center;">
-                  <a href="${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/library" class="button">
+                  <a href="${getAppUrl()}/become-creator" class="button">
+                    ✍️ Corriger et renvoyer ma demande
+                  </a>
+                </div>
+
+                <div style="text-align: center; margin-top: 10px;">
+                  <a href="${getAppUrl()}/library" class="button" style="background: #4b5563;">
                     📚 Retour à la bibliothèque
                   </a>
                 </div>

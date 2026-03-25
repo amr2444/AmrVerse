@@ -3,6 +3,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { del, put } from "@vercel/blob"
 import crypto from "crypto"
 import { getAuthenticatedUserId } from "@/lib/auth-request"
+import { applyRateLimit, createRateLimitHeaders, getRateLimitIdentifier } from "@/lib/rate-limiter"
+import { captureException, logEvent, withRateLimitHeaders } from "@/lib/observability"
 import { sanitizeFilename } from "@/lib/validations"
 import type { ApiResponse } from "@/lib/types"
 
@@ -69,6 +71,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(
+      request,
+      "upload",
+      getRateLimitIdentifier(request, userId),
+    )
+    if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "upload.rate_limited", request, userId })
+      return rateLimitResponse as NextResponse<ApiResponse<UploadResponse>>
+    }
+
     const formData = await request.formData()
     const file = formData.get("file") as File
 
@@ -133,7 +145,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       contentType: file.type,
     })
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         data: {
@@ -146,8 +158,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       },
       { status: 201 },
     )
+    logEvent({ event: "upload.completed", request, userId, metadata: { filename, size: file.size, contentType: file.type } })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[Upload error]:", error)
+    await captureException({ event: "upload.failed", request, error })
     return NextResponse.json(
       {
         success: false,
@@ -180,6 +194,16 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
         },
         { status: 500 },
       )
+    }
+
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(
+      request,
+      "upload",
+      getRateLimitIdentifier(request, userId),
+    )
+    if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "upload.delete_rate_limited", request, userId })
+      return rateLimitResponse as NextResponse<ApiResponse<null>>
     }
 
     const { searchParams } = new URL(request.url)
@@ -236,12 +260,14 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
 
     await del(url, { token: blobToken })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: null,
     })
+    logEvent({ event: "upload.deleted", request, userId, metadata: { url } })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[Delete error]:", error)
+    await captureException({ event: "upload.delete_failed", request, error })
     return NextResponse.json(
       {
         success: false,

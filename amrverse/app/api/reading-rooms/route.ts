@@ -3,6 +3,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
 import { generateRoomCode } from "@/lib/auth"
 import { getAuthenticatedUserId } from "@/lib/auth-request"
+import { applyRateLimit, createRateLimitHeaders, getRateLimitIdentifier } from "@/lib/rate-limiter"
+import { captureException, logEvent, withRateLimitHeaders } from "@/lib/observability"
 import type { ApiResponse, ReadingRoom } from "@/lib/types"
 
 export async function POST(request: NextRequest): Promise<NextResponse<ApiResponse<ReadingRoom>>> {
@@ -18,6 +20,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       )
     }
 
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(
+      request,
+      "room",
+      getRateLimitIdentifier(request, hostId),
+    )
+    if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "reading_room.create_rate_limited", request, userId: hostId })
+      return rateLimitResponse as NextResponse<ApiResponse<ReadingRoom>>
+    }
+
     const payload = await request.json()
     const code = generateRoomCode()
 
@@ -28,7 +40,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       [code, payload.manhwaId, payload.chapterId, hostId, payload.roomName, payload.maxParticipants || 10],
     )
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       {
         success: true,
         data: {
@@ -49,8 +61,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
       },
       { status: 201 },
     )
+    logEvent({ event: "reading_room.created", request, userId: hostId, metadata: { roomId: newRoom.id, chapterId: payload.chapterId, manhwaId: payload.manhwaId } })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[v0] Create room error:", error)
+    await captureException({ event: "reading_room.create_failed", request, error })
     return NextResponse.json(
       {
         success: false,
@@ -70,6 +84,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<ApiRespo
         { success: false, error: "Unauthorized" },
         { status: 401 },
       )
+    }
+
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(
+      request,
+      "room",
+      getRateLimitIdentifier(request, userId),
+    )
+    if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "reading_room.sync_rate_limited", request, userId })
+      return rateLimitResponse as NextResponse<ApiResponse<ReadingRoom>>
     }
 
     const payload = await request.json()
@@ -112,7 +136,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<ApiRespo
       [scrollPosition || 0, currentPageIndex || 0, roomId],
     )
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         id: updatedRoom.id,
@@ -130,8 +154,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<ApiRespo
         expiresAt: updatedRoom.expires_at,
       },
     })
+    logEvent({ event: "reading_room.synced", request, userId, metadata: { roomId, currentPageIndex } })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[v0] Update room scroll error:", error)
+    await captureException({ event: "reading_room.sync_failed", request, error })
     return NextResponse.json(
       { success: false, error: "Failed to update room" },
       { status: 500 },
@@ -148,6 +174,16 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
         { success: false, error: "Unauthorized" },
         { status: 401 },
       )
+    }
+
+    const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(
+      request,
+      "room",
+      getRateLimitIdentifier(request, userId),
+    )
+    if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "reading_room.delete_rate_limited", request, userId })
+      return rateLimitResponse as NextResponse<ApiResponse<{ deleted: boolean }>>
     }
 
     const { searchParams } = new URL(request.url)
@@ -187,12 +223,14 @@ export async function DELETE(request: NextRequest): Promise<NextResponse<ApiResp
       [roomId]
     )
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: { deleted: true },
     })
+    logEvent({ event: "reading_room.deleted", request, userId, metadata: { roomId } })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[v0] Delete room error:", error)
+    await captureException({ event: "reading_room.delete_failed", request, error })
     return NextResponse.json(
       { success: false, error: "Failed to delete room" },
       { status: 500 },

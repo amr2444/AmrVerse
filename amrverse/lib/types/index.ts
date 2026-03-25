@@ -27,6 +27,38 @@ export interface UserProfile extends User {
   createdManhwas?: string[]
 }
 
+export interface CreatorRequest {
+  id: string
+  userId: string
+  fullName: string
+  email: string
+  presentation: string
+  motivation: string
+  portfolioUrl?: string
+  status: "pending" | "approved" | "rejected"
+  createdAt: string
+  reviewedAt?: string
+  adminNotes?: string
+  auditTrail?: CreatorRequestAuditEntry[]
+}
+
+export interface AdminCreatorRequest extends CreatorRequest {
+  username: string
+  displayName?: string
+  reviewedBy?: string
+}
+
+export interface CreatorRequestAuditEntry {
+  id: string
+  requestId: string
+  actorUserId?: string
+  actorUsername?: string
+  actorType: "admin" | "system" | "user"
+  action: "submitted" | "resubmitted" | "approved" | "rejected"
+  notes?: string
+  createdAt: string
+}
+
 // Manhwa types
 export interface Manhwa {
   id: string
@@ -141,4 +173,68 @@ export interface PaginatedResponse<T> {
   page: number
   pageSize: number
   hasMore: boolean
+}
+
+export interface MangaDexCoverArt {
+  id: string
+  fileName: string
+}
+
+export interface MangaDexManga {
+  id: string
+  type: "manga"
+  title: string
+  altTitles: Array<Record<string, string>>
+  description: string
+  status?: string
+  year?: number
+  originalLanguage?: string
+  lastVolume: string | null
+  lastChapter: string | null
+  contentRating?: string
+  publicationDemographic: string | null
+  tags: Array<{
+    id: string
+    name: string
+  }>
+  coverArt?: MangaDexCoverArt
+}
+
+export interface MangaDexChapter {
+  id: string
+  type: "chapter"
+  volume: string | null
+  chapter: string | null
+  title: string | null
+  translatedLanguage: string
+  publishAt: string
+  pages: number
+  normalizedChapter: string | null
+  chapterNumber: number | null
+  isSpecial: boolean
+  releaseCount: number
+}
+
+export interface MangaDexChapterGroup {
+  key: string
+  label: string
+  isSpecial: boolean
+  primary: MangaDexChapter
+  alternates: MangaDexChapter[]
+}
+
+export interface MangaDexPagesResponse {
+  hash: string
+  data: string[]
+  dataSaver?: string[]
+}
+
+export type MangaDexPageFailureReason = "unavailable" | "network_error" | "invalid_response"
+
+export interface MangaDexChapterPagesResult {
+  success: boolean
+  pages: string[]
+  reason?: MangaDexPageFailureReason
+  chapterId: string
+  source: "data" | "dataSaver" | null
 }

@@ -38,6 +38,26 @@ export const RATE_LIMIT_CONFIGS = {
     windowMs: 60 * 60 * 1000,     // 1 hour
     maxRequests: 50,              // 50 uploads per hour
     blockDurationMs: 60 * 60 * 1000 // 1 hour block
+  },
+  creator: {
+    windowMs: 10 * 60 * 1000,
+    maxRequests: 10,
+    blockDurationMs: 30 * 60 * 1000,
+  },
+  admin: {
+    windowMs: 5 * 60 * 1000,
+    maxRequests: 60,
+    blockDurationMs: 10 * 60 * 1000,
+  },
+  room: {
+    windowMs: 60 * 1000,
+    maxRequests: 120,
+    blockDurationMs: 2 * 60 * 1000,
+  },
+  monitoring: {
+    windowMs: 60 * 1000,
+    maxRequests: 20,
+    blockDurationMs: 5 * 60 * 1000,
   }
 } as const
 
@@ -71,6 +91,7 @@ startCleanup()
 
 export interface RateLimitResult {
   allowed: boolean
+  limit: number
   remaining: number
   resetTime: number
   retryAfter?: number // Seconds until retry allowed (if blocked)
@@ -97,6 +118,7 @@ export function checkRateLimit(
     const retryAfter = Math.ceil((entry.blockedUntil - now) / 1000)
     return {
       allowed: false,
+      limit: config.maxRequests,
       remaining: 0,
       resetTime: entry.blockedUntil,
       retryAfter
@@ -113,6 +135,7 @@ export function checkRateLimit(
     
     return {
       allowed: true,
+      limit: config.maxRequests,
       remaining: config.maxRequests - 1,
       resetTime: now + config.windowMs
     }
@@ -129,6 +152,7 @@ export function checkRateLimit(
     const retryAfter = Math.ceil(config.blockDurationMs / 1000)
     return {
       allowed: false,
+      limit: config.maxRequests,
       remaining: 0,
       resetTime: entry.blockedUntil,
       retryAfter
@@ -139,6 +163,7 @@ export function checkRateLimit(
   
   return {
     allowed: true,
+    limit: config.maxRequests,
     remaining: config.maxRequests - entry.count,
     resetTime: entry.firstRequest + config.windowMs
   }
@@ -170,6 +195,7 @@ export function getClientIP(request: Request): string {
  */
 export function createRateLimitHeaders(result: RateLimitResult): Record<string, string> {
   const headers: Record<string, string> = {
+    "X-RateLimit-Limit": result.limit.toString(),
     "X-RateLimit-Remaining": result.remaining.toString(),
     "X-RateLimit-Reset": result.resetTime.toString()
   }
@@ -179,6 +205,10 @@ export function createRateLimitHeaders(result: RateLimitResult): Record<string, 
   }
 
   return headers
+}
+
+export function getRateLimitIdentifier(request: Request, userId?: string | null): string {
+  return userId || getClientIP(request)
 }
 
 /**

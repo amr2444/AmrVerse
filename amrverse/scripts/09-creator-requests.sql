@@ -32,3 +32,17 @@ COMMENT ON TABLE creator_requests IS 'Demandes de statut créateur soumises par 
 COMMENT ON COLUMN creator_requests.presentation IS 'Présentation personnelle du créateur';
 COMMENT ON COLUMN creator_requests.motivation IS 'Motivation et projets envisagés';
 COMMENT ON COLUMN creator_requests.status IS 'pending: en attente, approved: approuvé, rejected: rejeté';
+
+CREATE TABLE IF NOT EXISTS creator_request_audit_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  request_id UUID NOT NULL REFERENCES creator_requests(id) ON DELETE CASCADE,
+  actor_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  actor_type VARCHAR(50) NOT NULL,
+  action VARCHAR(50) NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_creator_request_audit_request ON creator_request_audit_logs(request_id, created_at DESC);
+
+COMMENT ON TABLE creator_request_audit_logs IS 'Historique d’audit des actions prises sur les demandes créateur';

@@ -6,7 +6,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import sql from "@/lib/db"
 import { hashPassword, generateTokenPair } from "@/lib/auth"
 import { setAuthCookies } from "@/lib/auth-cookies"
-import { applyRateLimit, getClientIP } from "@/lib/rate-limiter"
+import { applyRateLimit, createRateLimitHeaders } from "@/lib/rate-limiter"
+import { captureException, logEvent, withRateLimitHeaders } from "@/lib/observability"
 import { validateSignup, type SignupPayload } from "@/lib/validations"
 import type { ApiResponse, User } from "@/lib/types"
 
@@ -16,10 +17,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     const { result: rateLimitResult, response: rateLimitResponse } = applyRateLimit(request, "auth")
     
     if (rateLimitResponse) {
+      logEvent({ level: "warn", event: "auth.signup.rate_limited", request })
       return rateLimitResponse as NextResponse<ApiResponse<{ user: User; accessToken: string; refreshToken: string }>>
     }
 
     const payload: SignupPayload = await request.json()
+    logEvent({ event: "auth.signup.attempt", request, metadata: { email: payload.email?.toLowerCase(), username: payload.username } })
 
     // Validate input
     const validationErrors = validateSignup(payload)
@@ -119,14 +122,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<ApiRespon
     )
 
     setAuthCookies(response, { accessToken, refreshToken })
-    return response
+    logEvent({ event: "auth.signup.succeeded", request, userId: newUser.id, metadata: { email: newUser.email } })
+    return withRateLimitHeaders(response, createRateLimitHeaders(rateLimitResult))
   } catch (error) {
-    console.error("[v0] Signup error:", error)
+    await captureException({ event: "auth.signup.failed", request, error })
     const errorMessage = error instanceof Error ? error.message : "Failed to create account"
     return NextResponse.json(
       {
         success: false,
         error: errorMessage,
+        additionnalInfo: "An error occurred. Please try again later.",
       },
       { status: 500 },
     )

@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useRef, useState } from "react"
 import { Upload, X, Loader2, Check } from "lucide-react"
+import { uploadAsset } from "@/lib/services/upload-client"
 
 interface ImageUploaderProps {
   onUpload: (url: string) => void
@@ -46,21 +47,9 @@ export function ImageUploader({ onUpload, disabled = false, isLoading = false }:
     // Upload file
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      })
-
-      const result = await response.json()
-      if (result.success) {
-        setUploadedUrl(result.data.url)
-        onUpload(result.data.url)
-      } else {
-        setError(result.error || "Upload failed")
-      }
+      const result = await uploadAsset(file)
+      setUploadedUrl(result.data.url)
+      onUpload(result.data.url)
     } catch (err) {
       setError("Upload failed. Please try again.")
       console.error("[v0] Upload error:", err)

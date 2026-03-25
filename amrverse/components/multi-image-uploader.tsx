@@ -4,6 +4,7 @@ import type React from "react"
 import { useRef, useState, useCallback } from "react"
 import { Upload, X, Loader2, Check, GripVertical, AlertCircle, Images } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { uploadAsset } from "@/lib/services/upload-client"
 
 interface ImageFile {
   id: string
@@ -170,23 +171,12 @@ export function MultiImageUploader({
         ))
 
         try {
-          const formData = new FormData()
-          formData.append("file", image.file)
-
-          const response = await fetch("/api/upload", {
-            method: "POST",
-            body: formData,
-          })
-
-          const result = await response.json()
-
-          if (result.success) {
+          const result = await uploadAsset(image.file)
+          if (result.data.url) {
             uploadedUrls.push(result.data.url)
             setImages(prev => prev.map((img, idx) => 
               idx === i ? { ...img, uploading: false, uploadedUrl: result.data.url } : img
             ))
-          } else {
-            throw new Error(result.error || "Upload failed")
           }
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : "Upload failed"

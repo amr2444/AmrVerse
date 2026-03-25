@@ -503,7 +503,7 @@ export default function ProfilePage() {
                     <div 
                       key={manhwa.id} 
                       className="group cursor-pointer"
-                      onClick={() => router.push(`/reader/${manhwa.slug}`)}
+                      onClick={() => router.push(`/manhwa/${manhwa.id}`)}
                     >
                       <div className="relative overflow-hidden rounded-lg border-2 border-primary/20 hover:border-primary/50 transition-all duration-300 aspect-[3/4] bg-gradient-to-br from-card/60 to-card/20 group-hover:shadow-xl group-hover:shadow-primary/20 group-hover:scale-[1.02] transform">
                         {manhwa.coverUrl ? (
@@ -540,7 +540,7 @@ export default function ProfilePage() {
                     <div 
                       key={item.id}
                       className="flex items-center gap-4 bg-card/30 border border-primary/20 rounded-lg p-4 hover:border-primary/40 transition-all cursor-pointer"
-                      onClick={() => router.push(`/reader/${item.manhwaId}?chapter=${item.chapterId}`)}
+                      onClick={() => router.push(`/reader/local/${item.chapterId}`)}
                     >
                       <div className="w-16 h-20 rounded-lg bg-card/50 flex items-center justify-center overflow-hidden flex-shrink-0">
                         {item.manhwaCover ? (
